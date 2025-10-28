@@ -105,3 +105,98 @@ lib/
 - **Categories**: Use the horizontal filter chips to filter by category
 - **Status**: Use filter chips for All, Pending, Completed, or Overdue tasks
 - **Sorting**: Use the sort dropdown to organize tasks by various criteria
+
+## Testing
+
+[![Test Suite](https://github.com/yourusername/dooit/workflows/Test%20Suite/badge.svg)](https://github.com/yourusername/dooit/actions)
+
+This project has comprehensive test coverage including unit tests, widget tests, and golden tests.
+
+### Test Structure
+
+```
+test/
+├── unit/                          # Unit tests
+│   ├── app_utils_test.dart       # Tests for utility functions
+│   ├── task_provider_test.dart   # Tests for state management
+│   └── notification_service_test.dart # Tests for notifications
+├── widget/                        # Widget tests
+├── integration/                   # Integration tests
+├── golden/                        # Golden/screenshot tests
+│   └── task_card_golden_test.dart
+└── helpers/                       # Test utilities
+    ├── test_helpers.dart         # Test data and factories
+    └── mock_helpers.dart         # Mock objects
+
+```
+
+### Running Tests
+
+**Run all tests:**
+```bash
+flutter test
+```
+
+**Run unit tests only:**
+```bash
+flutter test test/unit/
+```
+
+**Run with coverage:**
+```bash
+flutter test --coverage
+```
+
+**View coverage report:**
+```bash
+# Generate HTML coverage report
+genhtml coverage/lcov.info -o coverage/html
+# Open in browser
+open coverage/html/index.html
+```
+
+**Run golden tests:**
+```bash
+flutter test --update-goldens --tags=golden
+```
+
+**Run specific test file:**
+```bash
+flutter test test/unit/app_utils_test.dart
+```
+
+### Test Coverage
+
+The project maintains minimum 80% test coverage for critical components:
+- **AppUtils**: Date formatting, sorting, filtering, and utility functions
+- **TaskProvider**: CRUD operations, state management, filtering, and statistics
+- **NotificationService**: Notification scheduling, cancellation, and timezone handling
+
+### Writing Tests
+
+Use the test helpers for creating test data:
+
+```dart
+import '../helpers/test_helpers.dart';
+
+test('example test', () {
+  // Create test task
+  final task = TestData.createTask(
+    title: 'Test Task',
+    priority: TaskPriority.high,
+  );
+  
+  // Create multiple tasks
+  final tasks = TestData.createTaskList(count: 10);
+});
+```
+
+### Continuous Integration
+
+Tests run automatically on every push and pull request via GitHub Actions. The CI pipeline:
+- Runs all unit and widget tests
+- Checks code formatting with `dart format`
+- Performs static analysis with `flutter analyze`
+- Generates and validates test coverage (minimum 80%)
+- Uploads coverage reports to Codecov
+- Runs golden tests to ensure UI consistency
