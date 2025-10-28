@@ -12,10 +12,10 @@ class TaskDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<TaskProvider>(
-      builder: (context, taskProvider, child) {
-        final task = taskProvider.getTaskById(taskId);
-
+    // Selector rebuilds detail screen only when the specific task changes.
+    return Selector<TaskProvider, Task?>(
+      selector: (context, provider) => provider.getTaskById(taskId),
+      builder: (context, task, _) {
         if (task == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Task Not Found')),
@@ -23,6 +23,7 @@ class TaskDetailScreen extends StatelessWidget {
           );
         }
 
+        final taskProvider = context.read<TaskProvider>();
         return Scaffold(
           appBar: _buildAppBar(context, task, taskProvider),
           body: _buildBody(context, task, taskProvider),

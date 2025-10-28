@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/task.dart';
@@ -228,51 +230,64 @@ class TaskProvider extends ChangeNotifier {
 
   // Search and filter operations
   void setSearchQuery(String query) {
+    developer.Timeline.startSync('TaskProvider.setSearchQuery');
     _searchQuery = query.toLowerCase();
     notifyListeners();
+    developer.Timeline.finishSync();
   }
 
   void setSortOption(SortOption sortOption) {
+    developer.Timeline.startSync('TaskProvider.setSortOption');
     _currentSort = sortOption;
     notifyListeners();
+    developer.Timeline.finishSync();
   }
 
   void setFilterOption(FilterOption filterOption) {
+    developer.Timeline.startSync('TaskProvider.setFilterOption');
     _currentFilter = filterOption;
     notifyListeners();
+    developer.Timeline.finishSync();
   }
 
   void setSelectedCategory(String category) {
+    developer.Timeline.startSync('TaskProvider.setSelectedCategory');
     _selectedCategory = category;
     notifyListeners();
+    developer.Timeline.finishSync();
   }
 
   List<Task> _getFilteredAndSortedTasks() {
-    List<Task> filteredTasks = List.from(_tasks);
+    developer.Timeline.startSync('TaskProvider._getFilteredAndSortedTasks');
+    try {
+      List<Task> filteredTasks = List.from(_tasks);
 
-    // Apply search filter
-    if (_searchQuery.isNotEmpty) {
-      filteredTasks = filteredTasks.where((task) {
-        return task.title.toLowerCase().contains(_searchQuery) ||
-            task.description.toLowerCase().contains(_searchQuery) ||
-            task.category.toLowerCase().contains(_searchQuery);
-      }).toList();
+      // Apply search filter
+      if (_searchQuery.isNotEmpty) {
+        filteredTasks = filteredTasks.where((task) {
+          return task.title.toLowerCase().contains(_searchQuery) ||
+              task.description.toLowerCase().contains(_searchQuery) ||
+              task.category.toLowerCase().contains(_searchQuery);
+        }).toList();
+      }
+
+      // Apply category filter
+      if (_selectedCategory != 'All') {
+        filteredTasks = filteredTasks
+            .where((task) => task.category == _selectedCategory)
+            .toList();
+      }
+
+      // Apply status filter
+      filteredTasks = AppUtils.filterTasks(filteredTasks, _currentFilter);
+
+      // Apply sorting
+      filteredTasks = AppUtils.sortTasks(filteredTasks, _currentSort);
+
+      return filteredTasks;
+    } finally {
+      developer.Timeline.finishSync();
     }
-
-    // Apply category filter
-    if (_selectedCategory != 'All') {
-      filteredTasks = filteredTasks
-          .where((task) => task.category == _selectedCategory)
-          .toList();
-    }
-
-    // Apply status filter
-    filteredTasks = AppUtils.filterTasks(filteredTasks, _currentFilter);
-
-    // Apply sorting
-    filteredTasks = AppUtils.sortTasks(filteredTasks, _currentSort);
-
-    return filteredTasks;
   }
 
   // Utility methods
