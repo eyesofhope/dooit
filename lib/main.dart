@@ -9,7 +9,7 @@ import 'models/app_version.dart';
 import 'providers/task_provider.dart';
 import 'services/notification_service.dart';
 import 'services/migration_service.dart';
-import 'screens/todo_screen.dart';
+import 'screens/adaptive_todo_screen.dart';
 import 'utils/app_theme.dart';
 import 'utils/app_utils.dart';
 
@@ -184,7 +184,7 @@ class _DoItAppState extends State<DoItApp> {
             themeMode: ThemeMode.system,
             home: Directionality(
               textDirection: TextDirection.ltr,
-              child: const TodoScreen(),
+              child: const AdaptiveTodoScreen(),
             ),
             builder: (context, child) {
               return MediaQuery(
