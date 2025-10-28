@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 
 import 'models/task.dart';
 import 'models/category.dart' as models;
 import 'models/app_version.dart';
+import 'models/app_settings.dart';
 import 'providers/task_provider.dart';
+import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
 import 'services/migration_service.dart';
 import 'screens/adaptive_todo_screen.dart';
@@ -24,6 +27,8 @@ void main() async {
   Hive.registerAdapter(TaskPriorityAdapter());
   Hive.registerAdapter(models.CategoryAdapter());
   Hive.registerAdapter(AppVersionAdapter());
+  Hive.registerAdapter(DefaultDueDateAdapter());
+  Hive.registerAdapter(AppSettingsAdapter());
 
   // Initialize notification service
   await NotificationService().initialize();
@@ -171,29 +176,45 @@ class _DoItAppState extends State<DoItApp> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
+          create: (context) => SettingsProvider()..initialize(),
+        ),
+        ChangeNotifierProvider(
           create: (context) => TaskProvider()..initialize(),
         ),
       ],
-      child: Consumer<TaskProvider>(
-        builder: (context, taskProvider, child) {
-          return MaterialApp(
-            title: AppConstants.appName,
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.system,
-            home: Directionality(
-              textDirection: TextDirection.ltr,
-              child: const AdaptiveTodoScreen(),
-            ),
-            builder: (context, child) {
-              return MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                  textScaler: MediaQuery.of(
-                    context,
-                  ).textScaler.clamp(minScaleFactor: 0.8, maxScaleFactor: 1.5),
+      child: Consumer<SettingsProvider>(
+        builder: (context, settingsProvider, child) {
+          return DynamicColorBuilder(
+            builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+              ColorScheme lightColorScheme;
+              ColorScheme darkColorScheme;
+
+              if (settingsProvider.useDynamicColors && lightDynamic != null && darkDynamic != null) {
+                lightColorScheme = lightDynamic.harmonized();
+                darkColorScheme = darkDynamic.harmonized();
+              } else {
+                lightColorScheme = AppTheme.lightTheme.colorScheme;
+                darkColorScheme = AppTheme.darkTheme.colorScheme;
+              }
+
+              return MaterialApp(
+                title: AppConstants.appName,
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.lightTheme.copyWith(colorScheme: lightColorScheme),
+                darkTheme: AppTheme.darkTheme.copyWith(colorScheme: darkColorScheme),
+                themeMode: settingsProvider.themeMode,
+                home: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: const AdaptiveTodoScreen(),
                 ),
-                child: child!,
+                builder: (context, child) {
+                  return MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(settingsProvider.textScale),
+                    ),
+                    child: child!,
+                  );
+                },
               );
             },
           );

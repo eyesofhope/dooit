@@ -18,6 +18,7 @@ import '../widgets/adaptive/master_detail_layout.dart';
 import '../widgets/adaptive/responsive_padding.dart';
 import 'task_detail_screen.dart';
 import 'placeholder_screen.dart';
+import 'settings_screen.dart';
 
 class AdaptiveTodoScreen extends StatefulWidget {
   const AdaptiveTodoScreen({super.key});
@@ -70,7 +71,15 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
         setState(() {
           _selectedNavIndex = index;
         });
-        if (index != 0) {
+        if (index == 3) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+          );
+          setState(() {
+            _selectedNavIndex = 0;
+          });
+        } else if (index != 0) {
           _showPlaceholderMessage(context);
           setState(() {
             _selectedNavIndex = 0;

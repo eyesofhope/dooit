@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../models/category.dart' as models;
+import '../models/app_settings.dart';
 import '../providers/task_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
 
@@ -33,6 +35,44 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
     super.initState();
     if (_isEditing) {
       _initializeFromTask();
+    } else {
+      _initializeFromSettings();
+    }
+  }
+
+  void _initializeFromSettings() {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    _selectedPriority = settingsProvider.defaultPriority;
+    
+    if (settingsProvider.defaultCategoryId != null) {
+      _selectedCategory = settingsProvider.defaultCategoryId!;
+    }
+
+    switch (settingsProvider.defaultDueDate) {
+      case DefaultDueDate.today:
+        _selectedDueDate = DateTime.now();
+        break;
+      case DefaultDueDate.tomorrow:
+        _selectedDueDate = DateTime.now().add(const Duration(days: 1));
+        break;
+      case DefaultDueDate.nextWeek:
+        _selectedDueDate = DateTime.now().add(const Duration(days: 7));
+        break;
+      case DefaultDueDate.none:
+        _selectedDueDate = null;
+        break;
+    }
+
+    if (_selectedDueDate != null) {
+      final defaultTime = settingsProvider.defaultReminderTime;
+      _selectedDueDate = DateTime(
+        _selectedDueDate!.year,
+        _selectedDueDate!.month,
+        _selectedDueDate!.day,
+        defaultTime.hour,
+        defaultTime.minute,
+      );
+      _selectedDueTime = defaultTime;
     }
   }
 
