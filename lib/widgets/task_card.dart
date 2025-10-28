@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
+import '../models/recurrence.dart';
 import '../providers/task_provider.dart';
 import '../utils/app_utils.dart';
 
@@ -39,7 +40,13 @@ class TaskCard extends StatelessWidget {
             previous.priority != next.priority ||
             previous.category != next.category ||
             previous.isCompleted != next.isCompleted ||
-            previous.hasNotification != next.hasNotification;
+            previous.hasNotification != next.hasNotification ||
+            previous.recurrenceType != next.recurrenceType ||
+            previous.recurrenceInterval != next.recurrenceInterval ||
+            previous.recurrenceEndDate != next.recurrenceEndDate ||
+            previous.parentRecurringTaskId != next.parentRecurringTaskId ||
+            previous.isRecurringInstance != next.isRecurringInstance ||
+            previous.recurrenceRule != next.recurrenceRule;
       },
       builder: (context, task, _) {
         if (task == null) {
@@ -186,6 +193,17 @@ class TaskCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (_hasRecurrence(task)) ...[
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: _recurrenceTooltip(task),
+                      child: Icon(
+                        Icons.repeat,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
                   const Spacer(),
                   // Due date or overdue indicator
                   if (task.dueDate != null) ...[
@@ -256,5 +274,98 @@ class TaskCard extends StatelessWidget {
       ),
       ),
     );
+  }
+
+  bool _hasRecurrence(Task task) {
+    final RecurrenceType? type =
+        task.recurrenceType ?? task.recurrenceRule?.type;
+    return type != null && type != RecurrenceType.none;
+  }
+
+  String _recurrenceTooltip(Task task) {
+    final RecurrenceType? type =
+        task.recurrenceType ?? task.recurrenceRule?.type;
+    if (type == null || type == RecurrenceType.none) {
+      return 'Does not repeat';
+    }
+
+    final int interval =
+        task.recurrenceInterval ?? task.recurrenceRule?.interval ?? 1;
+    String description;
+
+    switch (type) {
+      case RecurrenceType.daily:
+        description = interval == 1
+            ? 'Every day'
+            : 'Every $interval days';
+        break;
+      case RecurrenceType.weekly:
+        final weekdays = task.recurrenceRule?.weekdays ??
+            <int>[task.dueDate?.weekday ?? DateTime.monday];
+        final labels = (List<int>.from(weekdays)..sort())
+            .map(_weekdayLabel)
+            .join(', ');
+        description = interval == 1
+            ? 'Every week on $labels'
+            : 'Every $interval weeks on $labels';
+        break;
+      case RecurrenceType.monthly:
+        final bool useLastDay = task.recurrenceRule?.useLastDayOfMonth ??
+            (task.dueDate != null && _isLastDay(task.dueDate!));
+        final int day =
+            task.recurrenceRule?.monthDay ?? task.dueDate?.day ?? 1;
+        final String dayLabel = useLastDay ? 'the last day' : 'day $day';
+        description = interval == 1
+            ? 'Every month on $dayLabel'
+            : 'Every $interval months on $dayLabel';
+        break;
+      case RecurrenceType.yearly:
+        final due = task.dueDate;
+        final formatted =
+            due != null ? AppUtils.formatDate(due) : 'selected date';
+        description = interval == 1
+            ? 'Every year on $formatted'
+            : 'Every $interval years on $formatted';
+        break;
+      case RecurrenceType.none:
+        description = 'Does not repeat';
+        break;
+    }
+
+    if (task.recurrenceEndDate != null) {
+      description += ' until ${AppUtils.formatDate(task.recurrenceEndDate)}';
+    }
+
+    if (task.isRecurringInstance) {
+      description += '\nRecurring instance';
+    }
+
+    return description;
+  }
+
+  String _weekdayLabel(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Mon';
+      case DateTime.tuesday:
+        return 'Tue';
+      case DateTime.wednesday:
+        return 'Wed';
+      case DateTime.thursday:
+        return 'Thu';
+      case DateTime.friday:
+        return 'Fri';
+      case DateTime.saturday:
+        return 'Sat';
+      case DateTime.sunday:
+        return 'Sun';
+      default:
+        return 'Day';
+    }
+  }
+
+  bool _isLastDay(DateTime date) {
+    final lastDay = DateTime(date.year, date.month + 1, 0).day;
+    return date.day == lastDay;
   }
 }

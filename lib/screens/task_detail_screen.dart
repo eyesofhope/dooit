@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
+import '../models/recurrence.dart';
 import '../providers/task_provider.dart';
 import '../utils/app_utils.dart';
 import '../widgets/add_edit_task_dialog.dart';
@@ -346,6 +347,15 @@ class TaskDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
             ],
+            if (_hasRecurrence(task)) ...[
+              _buildDetailRow(
+                context,
+                'Recurrence',
+                _recurrenceDescription(task),
+                Icons.repeat,
+              ),
+              const SizedBox(height: 12),
+            ],
             _buildDetailRow(
               context,
               'Reminder',
@@ -437,6 +447,99 @@ class TaskDetailScreen extends StatelessWidget {
     );
   }
 
+  bool _hasRecurrence(Task task) {
+    final RecurrenceType? type =
+        task.recurrenceType ?? task.recurrenceRule?.type;
+    return type != null && type != RecurrenceType.none;
+  }
+
+  String _recurrenceDescription(Task task) {
+    final RecurrenceType? type =
+        task.recurrenceType ?? task.recurrenceRule?.type;
+    if (type == null || type == RecurrenceType.none) {
+      return 'Does not repeat';
+    }
+
+    final int interval =
+        task.recurrenceInterval ?? task.recurrenceRule?.interval ?? 1;
+    String description;
+
+    switch (type) {
+      case RecurrenceType.daily:
+        description = interval == 1
+            ? 'Every day'
+            : 'Every $interval days';
+        break;
+      case RecurrenceType.weekly:
+        final weekdays = task.recurrenceRule?.weekdays ??
+            <int>[task.dueDate?.weekday ?? DateTime.monday];
+        final labels = (List<int>.from(weekdays)..sort())
+            .map(_weekdayLabel)
+            .join(', ');
+        description = interval == 1
+            ? 'Every week on $labels'
+            : 'Every $interval weeks on $labels';
+        break;
+      case RecurrenceType.monthly:
+        final bool useLastDay = task.recurrenceRule?.useLastDayOfMonth ??
+            (task.dueDate != null && _isLastDay(task.dueDate!));
+        final int day =
+            task.recurrenceRule?.monthDay ?? task.dueDate?.day ?? 1;
+        final String dayLabel = useLastDay ? 'the last day' : 'day $day';
+        description = interval == 1
+            ? 'Every month on $dayLabel'
+            : 'Every $interval months on $dayLabel';
+        break;
+      case RecurrenceType.yearly:
+        final due = task.dueDate;
+        final formatted =
+            due != null ? AppUtils.formatDate(due) : 'the selected date';
+        description = interval == 1
+            ? 'Every year on $formatted'
+            : 'Every $interval years on $formatted';
+        break;
+      case RecurrenceType.none:
+        description = 'Does not repeat';
+        break;
+    }
+
+    if (task.recurrenceEndDate != null) {
+      description += ' until ${AppUtils.formatDate(task.recurrenceEndDate)}';
+    }
+
+    if (task.isRecurringInstance) {
+      description += '\nThis is a recurring instance';
+    }
+
+    return description;
+  }
+
+  String _weekdayLabel(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Mon';
+      case DateTime.tuesday:
+        return 'Tue';
+      case DateTime.wednesday:
+        return 'Wed';
+      case DateTime.thursday:
+        return 'Thu';
+      case DateTime.friday:
+        return 'Fri';
+      case DateTime.saturday:
+        return 'Sat';
+      case DateTime.sunday:
+        return 'Sun';
+      default:
+        return 'Day';
+    }
+  }
+
+  bool _isLastDay(DateTime date) {
+    final lastDay = DateTime(date.year, date.month + 1, 0).day;
+    return date.day == lastDay;
+  }
+
   void _showEditDialog(BuildContext context, Task task) {
     showDialog(
       context: context,
@@ -486,6 +589,21 @@ class TaskDetailScreen extends StatelessWidget {
       category: task.category,
       dueDate: task.dueDate,
       hasNotification: task.hasNotification,
+      recurrenceType: task.recurrenceType,
+      recurrenceInterval: task.recurrenceInterval,
+      recurrenceEndDate: task.recurrenceEndDate,
+      recurrenceRule: task.recurrenceRule != null
+          ? Recurrence(
+              type: task.recurrenceRule!.type,
+              interval: task.recurrenceRule!.interval,
+              endDate: task.recurrenceRule!.endDate,
+              weekdays: task.recurrenceRule!.weekdays != null
+                  ? List<int>.from(task.recurrenceRule!.weekdays!)
+                  : null,
+              monthDay: task.recurrenceRule!.monthDay,
+              useLastDayOfMonth: task.recurrenceRule!.useLastDayOfMonth,
+            )
+          : null,
     );
 
     taskProvider.addTask(duplicatedTask);

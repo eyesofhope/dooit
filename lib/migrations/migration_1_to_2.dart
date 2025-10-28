@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../services/migration_service.dart';
 import '../models/task.dart';
 import '../models/category.dart' as models;
+import '../models/recurrence.dart';
 
 class Migration1To2 extends Migration {
   @override
@@ -12,7 +13,7 @@ class Migration1To2 extends Migration {
   int get toVersion => 2;
 
   @override
-  String get description => 'Add tags field to tasks and icon field to categories';
+  String get description => 'Add recurrence support to tasks';
 
   @override
   Future<void> migrate(Box tasksBox, Box categoriesBox) async {
@@ -33,12 +34,13 @@ class Migration1To2 extends Migration {
 
   Future<void> _migrateTasksBox(Box tasksBox) async {
     int migratedCount = 0;
+    int unchangedCount = 0;
     int errorCount = 0;
 
     for (int i = 0; i < tasksBox.length; i++) {
       try {
         final task = tasksBox.getAt(i);
-        
+
         if (task == null) {
           debugPrint('Null task at index $i, skipping');
           continue;
@@ -50,14 +52,55 @@ class Migration1To2 extends Migration {
           continue;
         }
 
-        migratedCount++;
+        bool changed = false;
+
+        if (task.recurrenceType == null) {
+          task.recurrenceType = RecurrenceType.none;
+          changed = true;
+        }
+
+        if (task.recurrenceInterval == null || task.recurrenceInterval! <= 0) {
+          task.recurrenceInterval = 1;
+          changed = true;
+        }
+
+        if (task.recurrenceEndDate != null &&
+            (task.recurrenceType == RecurrenceType.none)) {
+          task.recurrenceEndDate = null;
+          changed = true;
+        }
+
+        if (task.parentRecurringTaskId != null) {
+          task.parentRecurringTaskId = null;
+          changed = true;
+        }
+
+        if (task.recurrenceRule != null &&
+            (task.recurrenceType == RecurrenceType.none)) {
+          task.recurrenceRule = null;
+          changed = true;
+        }
+
+        if (task.isRecurringInstance != false) {
+          task.isRecurringInstance = false;
+          changed = true;
+        }
+
+        if (changed) {
+          await tasksBox.putAt(i, task);
+          migratedCount++;
+        } else {
+          unchangedCount++;
+        }
       } catch (e) {
         debugPrint('Error processing task at index $i: $e');
         errorCount++;
       }
     }
 
-    debugPrint('Tasks migrated: $migratedCount, errors: $errorCount');
+    debugPrint(
+      'Tasks migrated: $migratedCount, unchanged: $unchangedCount, errors: $errorCount',
+    );
   }
 
   Future<void> _migrateCategoriesBox(Box categoriesBox) async {

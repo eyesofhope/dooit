@@ -5,12 +5,14 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/task.dart';
 import '../models/category.dart' as models;
 import '../services/notification_service.dart';
+import '../services/recurrence_service.dart';
 import '../utils/app_utils.dart';
 
 class TaskProvider extends ChangeNotifier {
   Box<Task>? _tasksBox;
   Box<models.Category>? _categoriesBox;
   final NotificationService _notificationService = NotificationService();
+  final RecurrenceService _recurrenceService = const RecurrenceService();
 
   // State variables
   List<Task> _tasks = [];
@@ -156,14 +158,31 @@ class TaskProvider extends ChangeNotifier {
   Future<void> toggleTaskCompletion(String taskId) async {
     try {
       final index = _tasks.indexWhere((task) => task.id == taskId);
-      if (index != -1) {
-        final task = _tasks[index];
-        final updatedTask = task.copyWith(
-          isCompleted: !task.isCompleted,
-          completedAt: !task.isCompleted ? DateTime.now() : null,
-        );
+      if (index == -1) {
+        return;
+      }
 
-        await updateTask(updatedTask);
+      final task = _tasks[index];
+      final bool willComplete = !task.isCompleted;
+
+      final updatedTask = task.copyWith(
+        isCompleted: willComplete,
+        completedAt: willComplete ? DateTime.now() : null,
+      );
+
+      await updateTask(updatedTask);
+
+      if (willComplete &&
+          _recurrenceService.shouldGenerateNextInstance(updatedTask)) {
+        try {
+          final Task nextInstance =
+              _recurrenceService.generateNextInstance(updatedTask);
+          await addTask(nextInstance);
+        } catch (error) {
+          debugPrint(
+            'Error generating next recurrence instance for task ${task.id}: $error',
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error toggling task completion: $e');
