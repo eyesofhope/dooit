@@ -8,6 +8,7 @@ import 'models/task.dart';
 import 'models/category.dart' as models;
 import 'models/app_version.dart';
 import 'models/app_settings.dart';
+import 'models/recurrence.dart';
 import 'providers/task_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
@@ -25,6 +26,8 @@ void main() async {
   // Register Hive adapters
   Hive.registerAdapter(TaskAdapter());
   Hive.registerAdapter(TaskPriorityAdapter());
+  Hive.registerAdapter(RecurrenceTypeAdapter());
+  Hive.registerAdapter(RecurrenceAdapter());
   Hive.registerAdapter(models.CategoryAdapter());
   Hive.registerAdapter(AppVersionAdapter());
   Hive.registerAdapter(DefaultDueDateAdapter());

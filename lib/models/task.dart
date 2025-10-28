@@ -1,6 +1,8 @@
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 
+import 'recurrence.dart';
+
 part 'task.g.dart';
 
 @HiveType(typeId: 0)
@@ -45,6 +47,24 @@ class Task extends HiveObject {
   @HiveField(9)
   bool hasNotification;
 
+  @HiveField(10)
+  RecurrenceType? recurrenceType;
+
+  @HiveField(11)
+  int? recurrenceInterval;
+
+  @HiveField(12)
+  DateTime? recurrenceEndDate;
+
+  @HiveField(13)
+  String? parentRecurringTaskId;
+
+  @HiveField(14)
+  bool isRecurringInstance;
+
+  @HiveField(15)
+  Recurrence? recurrenceRule;
+
   Task({
     String? id,
     required this.title,
@@ -56,6 +76,12 @@ class Task extends HiveObject {
     DateTime? createdAt,
     this.completedAt,
     this.hasNotification = false,
+    this.recurrenceType,
+    this.recurrenceInterval,
+    this.recurrenceEndDate,
+    this.parentRecurringTaskId,
+    this.isRecurringInstance = false,
+    this.recurrenceRule,
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now();
 
@@ -70,6 +96,12 @@ class Task extends HiveObject {
     DateTime? createdAt,
     DateTime? completedAt,
     bool? hasNotification,
+    RecurrenceType? recurrenceType,
+    int? recurrenceInterval,
+    DateTime? recurrenceEndDate,
+    String? parentRecurringTaskId,
+    bool? isRecurringInstance,
+    Recurrence? recurrenceRule,
   }) {
     return Task(
       id: id ?? this.id,
@@ -82,12 +114,19 @@ class Task extends HiveObject {
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
       hasNotification: hasNotification ?? this.hasNotification,
+      recurrenceType: recurrenceType ?? this.recurrenceType,
+      recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
+      recurrenceEndDate: recurrenceEndDate ?? this.recurrenceEndDate,
+      parentRecurringTaskId:
+          parentRecurringTaskId ?? this.parentRecurringTaskId,
+      isRecurringInstance: isRecurringInstance ?? this.isRecurringInstance,
+      recurrenceRule: recurrenceRule ?? this.recurrenceRule,
     );
   }
 
   @override
   String toString() {
-    return 'Task{id: $id, title: $title, isCompleted: $isCompleted, priority: $priority, category: $category}';
+    return 'Task{id: $id, title: $title, isCompleted: $isCompleted, priority: $priority, category: $category, recurrenceType: $recurrenceType, recurrenceInterval: $recurrenceInterval, recurrenceEndDate: $recurrenceEndDate, parentRecurringTaskId: $parentRecurringTaskId, isRecurringInstance: $isRecurringInstance}';
   }
 
   @override

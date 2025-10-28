@@ -7,7 +7,7 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   // Schema version for migrations
-  static const int currentSchemaVersion = 1;
+  static const int currentSchemaVersion = 2;
 
   // Hive box names
   static const String tasksBoxName = 'tasks';
