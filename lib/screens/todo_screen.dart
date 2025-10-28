@@ -12,6 +12,7 @@ import '../widgets/filter_chips.dart';
 import '../widgets/sort_dropdown.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/notification_test_widget.dart';
+import '../widgets/error_widgets/error_snackbar.dart';
 import 'task_detail_screen.dart';
 
 class TodoScreen extends StatefulWidget {
@@ -385,18 +386,31 @@ class _TodoScreenState extends State<TodoScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              Provider.of<TaskProvider>(
+            onPressed: () async {
+              final taskProvider = Provider.of<TaskProvider>(
                 context,
                 listen: false,
-              ).deleteTask(task.id);
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Task "${task.title}" deleted'),
-                  duration: const Duration(seconds: 2),
-                ),
               );
+              final success = await taskProvider.deleteTask(task.id);
+              
+              if (mounted) {
+                Navigator.of(context).pop();
+                
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Task "${task.title}" deleted'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                } else if (taskProvider.lastError != null) {
+                  ErrorSnackbar.show(
+                    context,
+                    taskProvider.lastError!,
+                    onRetry: () => _confirmDeleteTask(context, task),
+                  );
+                }
+              }
             },
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
@@ -455,19 +469,34 @@ class _TodoScreenState extends State<TodoScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
+              int successCount = 0;
               for (final task in completedTasks) {
-                taskProvider.deleteTask(task.id);
+                final success = await taskProvider.deleteTask(task.id);
+                if (success) successCount++;
               }
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '${completedTasks.length} completed tasks cleared',
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
+              
+              if (mounted) {
+                Navigator.of(context).pop();
+                
+                if (successCount > 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '$successCount completed tasks cleared',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+                
+                if (successCount < completedTasks.length && taskProvider.lastError != null) {
+                  ErrorSnackbar.show(
+                    context,
+                    taskProvider.lastError!,
+                  );
+                }
+              }
             },
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,

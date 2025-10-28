@@ -4,7 +4,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import '../models/task.dart';
+import '../models/app_error.dart';
+import '../services/logging_service.dart';
 import '../utils/app_utils.dart';
+import '../utils/error_messages.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -13,24 +16,24 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
+  final LoggingService _loggingService = LoggingService();
   bool _initialized = false;
+  bool _permissionsGranted = false;
 
   Future<void> initialize() async {
     if (_initialized) return;
 
     try {
-      // Initialize timezone data
+      _loggingService.info('Initializing NotificationService', context: 'NotificationService');
+
       tz_data.initializeTimeZones();
       
-      // Set local timezone
       final String timeZoneName = await _getTimeZoneName();
       tz.setLocalLocation(tz.getLocation(timeZoneName));
 
-      // Android initialization with notification channel
       const AndroidInitializationSettings androidSettings =
           AndroidInitializationSettings('@mipmap/ic_launcher');
 
-      // iOS initialization
       const DarwinInitializationSettings iosSettings =
           DarwinInitializationSettings(
             requestAlertPermission: true,
@@ -38,34 +41,41 @@ class NotificationService {
             requestSoundPermission: true,
           );
 
-      // Combined initialization settings
       const InitializationSettings initSettings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
         macOS: iosSettings,
       );
 
-      // Initialize the plugin
       await _notifications.initialize(
         initSettings,
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
-      // Create notification channel for Android
       if (Platform.isAndroid) {
         await _createAndroidNotificationChannel();
-        await _requestAndroidPermissions();
+        _permissionsGranted = await _requestAndroidPermissions();
       }
 
-      // Request permissions for iOS
       if (Platform.isIOS) {
-        await _requestIOSPermissions();
+        _permissionsGranted = await _requestIOSPermissions();
       }
 
       _initialized = true;
-      debugPrint('NotificationService initialized successfully');
-    } catch (e) {
-      debugPrint('Error initializing NotificationService: $e');
+      _loggingService.info(
+        'NotificationService initialized successfully (permissions: $_permissionsGranted)',
+        context: 'NotificationService',
+      );
+    } catch (e, stackTrace) {
+      final error = NotificationError(
+        message: ErrorMessages.notificationInitFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'NotificationService.initialize',
+      );
+      _loggingService.logAppError(error);
+      _initialized = false;
+      _permissionsGranted = false;
     }
   }
 
@@ -100,51 +110,98 @@ class NotificationService {
     }
   }
 
-  Future<void> _requestAndroidPermissions() async {
-    final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-        _notifications
-            .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin
-            >();
+  Future<bool> _requestAndroidPermissions() async {
+    try {
+      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+          _notifications
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >();
 
-    if (androidImplementation != null) {
-      await androidImplementation.requestNotificationsPermission();
-      await androidImplementation.requestExactAlarmsPermission();
+      if (androidImplementation != null) {
+        final notificationsPermission = await androidImplementation.requestNotificationsPermission();
+        final exactAlarmsPermission = await androidImplementation.requestExactAlarmsPermission();
+        
+        _loggingService.info(
+          'Android permissions - Notifications: $notificationsPermission, Exact Alarms: $exactAlarmsPermission',
+          context: 'NotificationService',
+        );
+        
+        return notificationsPermission ?? false;
+      }
+      return false;
+    } catch (e, stackTrace) {
+      _loggingService.error(
+        'Failed to request Android permissions',
+        context: 'NotificationService._requestAndroidPermissions',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return false;
     }
   }
 
-  Future<void> _requestIOSPermissions() async {
-    final IOSFlutterLocalNotificationsPlugin? iosImplementation = _notifications
-        .resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin
-        >();
+  Future<bool> _requestIOSPermissions() async {
+    try {
+      final IOSFlutterLocalNotificationsPlugin? iosImplementation = _notifications
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
 
-    if (iosImplementation != null) {
-      await iosImplementation.requestPermissions(
-        alert: true,
-        badge: true,
-        sound: true,
+      if (iosImplementation != null) {
+        final result = await iosImplementation.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        
+        _loggingService.info(
+          'iOS permissions granted: $result',
+          context: 'NotificationService',
+        );
+        
+        return result ?? false;
+      }
+      return false;
+    } catch (e, stackTrace) {
+      _loggingService.error(
+        'Failed to request iOS permissions',
+        context: 'NotificationService._requestIOSPermissions',
+        error: e,
+        stackTrace: stackTrace,
       );
+      return false;
     }
   }
 
   Future<void> scheduleTaskNotification(Task task) async {
     if (!_initialized) await initialize();
 
+    if (!_permissionsGranted) {
+      throw PermissionError(
+        message: ErrorMessages.permissionNotificationDenied,
+        context: 'NotificationService.scheduleTaskNotification',
+      );
+    }
+
     if (task.dueDate == null || task.isCompleted) {
-      debugPrint('Skipping notification: No due date or task completed');
+      _loggingService.debug(
+        'Skipping notification: No due date or task completed',
+        context: 'NotificationService',
+      );
       return;
     }
 
     try {
-      // Convert to TZDateTime
       final scheduledDate = tz.TZDateTime.from(task.dueDate!, tz.local);
       final now = tz.TZDateTime.now(tz.local);
 
-      // Don't schedule notifications for past dates (with 1 minute buffer)
       if (scheduledDate.isBefore(now.add(const Duration(minutes: 1)))) {
-        debugPrint('Skipping notification: Scheduled time is in the past');
-        return;
+        throw NotificationError(
+          message: ErrorMessages.notificationPastDate,
+          context: 'NotificationService.scheduleTaskNotification',
+          severity: ErrorSeverity.warning,
+        );
       }
 
       // Create notification details with enhanced configuration
@@ -204,10 +261,8 @@ class NotificationService {
         macOS: iosDetails,
       );
 
-      // Cancel existing notification for this task
       await cancelTaskNotification(task.id);
 
-      // Schedule the new notification
       await _notifications.zonedSchedule(
         task.id.hashCode,
         '📋 Task Reminder: ${task.title}',
@@ -222,26 +277,35 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
 
-      debugPrint(
-        '✅ Notification scheduled successfully for task: "${task.title}" at $scheduledDate (Local: ${scheduledDate.toLocal()})',
+      _loggingService.info(
+        'Notification scheduled for task: "${task.title}" at $scheduledDate',
+        context: 'NotificationService.scheduleTaskNotification',
       );
       
-      // Verify the notification was scheduled
       final pendingNotifications = await getPendingNotifications();
       final scheduledNotification = pendingNotifications.firstWhere(
         (notification) => notification.id == task.id.hashCode,
-        orElse: () => throw Exception('Notification not found'),
+        orElse: () => throw NotificationError(
+          message: 'Notification verification failed',
+          context: 'NotificationService.scheduleTaskNotification',
+        ),
       );
-      debugPrint('📅 Verified scheduled notification: ${scheduledNotification.title}');
+      _loggingService.debug(
+        'Verified scheduled notification: ${scheduledNotification.title}',
+        context: 'NotificationService',
+      );
       
-    } catch (e) {
-      debugPrint('❌ Error scheduling notification: $e');
-      // Show a fallback instant notification for testing
-      await showInstantNotification(
-        'Notification Error',
-        'Could not schedule reminder for "${task.title}". Error: $e',
-        payload: task.id,
-      );
+    } catch (e, stackTrace) {
+      final error = e is AppError
+          ? e
+          : NotificationError(
+              message: ErrorMessages.notificationScheduleFailed,
+              technicalDetails: e.toString(),
+              stackTrace: stackTrace,
+              context: 'NotificationService.scheduleTaskNotification - task: ${task.title}',
+            );
+      _loggingService.logAppError(error);
+      throw error;
     }
   }
 
@@ -250,9 +314,17 @@ class NotificationService {
 
     try {
       await _notifications.cancel(taskId.hashCode);
-      debugPrint('Notification cancelled for task: $taskId');
-    } catch (e) {
-      debugPrint('Error cancelling notification: $e');
+      _loggingService.debug('Notification cancelled for task: $taskId', context: 'NotificationService');
+    } catch (e, stackTrace) {
+      final error = NotificationError(
+        message: ErrorMessages.notificationCancelFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'NotificationService.cancelTaskNotification',
+        severity: ErrorSeverity.warning,
+      );
+      _loggingService.logAppError(error);
+      throw error;
     }
   }
 
@@ -261,9 +333,16 @@ class NotificationService {
 
     try {
       await _notifications.cancelAll();
-      debugPrint('All notifications cancelled');
-    } catch (e) {
-      debugPrint('Error cancelling all notifications: $e');
+      _loggingService.info('All notifications cancelled', context: 'NotificationService');
+    } catch (e, stackTrace) {
+      final error = NotificationError(
+        message: ErrorMessages.notificationCancelFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'NotificationService.cancelAllNotifications',
+      );
+      _loggingService.logAppError(error);
+      throw error;
     }
   }
 
@@ -272,8 +351,13 @@ class NotificationService {
 
     try {
       return await _notifications.pendingNotificationRequests();
-    } catch (e) {
-      debugPrint('Error getting pending notifications: $e');
+    } catch (e, stackTrace) {
+      _loggingService.error(
+        'Error getting pending notifications',
+        context: 'NotificationService.getPendingNotifications',
+        error: e,
+        stackTrace: stackTrace,
+      );
       return [];
     }
   }
@@ -281,9 +365,7 @@ class NotificationService {
   void _onNotificationTapped(NotificationResponse response) {
     final taskId = response.payload;
     if (taskId != null) {
-      debugPrint('Notification tapped for task: $taskId');
-      // Here you can navigate to the task detail screen or perform other actions
-      // This would typically be handled by a navigation service or callback
+      _loggingService.info('Notification tapped for task: $taskId', context: 'NotificationService');
     }
   }
 
@@ -326,13 +408,17 @@ class NotificationService {
         notificationDetails,
         payload: payload,
       );
-      debugPrint('✅ Instant notification shown: $title');
-    } catch (e) {
-      debugPrint('❌ Error showing instant notification: $e');
+      _loggingService.debug('Instant notification shown: $title', context: 'NotificationService');
+    } catch (e, stackTrace) {
+      _loggingService.error(
+        'Error showing instant notification',
+        context: 'NotificationService.showInstantNotification',
+        error: e,
+        stackTrace: stackTrace,
+      );
     }
   }
 
-  // Test notification method - shows a notification 5 seconds from now
   Future<void> scheduleTestNotification() async {
     if (!_initialized) await initialize();
 
@@ -362,7 +448,7 @@ class NotificationService {
       );
 
       await _notifications.zonedSchedule(
-        999999, // Test notification ID
+        999999,
         '🧪 Test Notification',
         'This is a test notification to verify the system is working!',
         scheduledDate,
@@ -372,27 +458,44 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
 
-      debugPrint('🧪 Test notification scheduled for: $scheduledDate');
-    } catch (e) {
-      debugPrint('❌ Error scheduling test notification: $e');
+      _loggingService.info('Test notification scheduled for: $scheduledDate', context: 'NotificationService');
+    } catch (e, stackTrace) {
+      _loggingService.error(
+        'Error scheduling test notification',
+        context: 'NotificationService.scheduleTestNotification',
+        error: e,
+        stackTrace: stackTrace,
+      );
     }
   }
 
   Future<bool> areNotificationsEnabled() async {
     if (!_initialized) await initialize();
 
-    if (Platform.isAndroid) {
-      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-          _notifications
-              .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin
-              >();
+    try {
+      if (Platform.isAndroid) {
+        final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+            _notifications
+                .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin
+                >();
 
-      if (androidImplementation != null) {
-        return await androidImplementation.areNotificationsEnabled() ?? false;
+        if (androidImplementation != null) {
+          return await androidImplementation.areNotificationsEnabled() ?? false;
+        }
       }
-    }
 
-    return true; // Assume enabled for iOS as permission is requested during initialization
+      return _permissionsGranted;
+    } catch (e, stackTrace) {
+      _loggingService.error(
+        'Error checking notification permissions',
+        context: 'NotificationService.areNotificationsEnabled',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
   }
+
+  bool get hasPermissions => _permissionsGranted;
 }

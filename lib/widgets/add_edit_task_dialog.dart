@@ -5,6 +5,7 @@ import '../models/category.dart' as models;
 import '../providers/task_provider.dart';
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
+import '../widgets/error_widgets/error_snackbar.dart';
 
 class AddEditTaskDialog extends StatefulWidget {
   final Task? task;
@@ -430,7 +431,7 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
     });
   }
 
-  void _saveTask() {
+  Future<void> _saveTask() async {
     if (!_formKey.currentState!.validate()) return;
 
     final taskProvider = Provider.of<TaskProvider>(context, listen: false);
@@ -446,6 +447,8 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
       );
     }
 
+    bool success = false;
+    
     if (_isEditing) {
       final updatedTask = widget.task!.copyWith(
         title: _titleController.text.trim(),
@@ -455,7 +458,7 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
         dueDate: dueDateTime,
         hasNotification: _hasNotification && dueDateTime != null,
       );
-      taskProvider.updateTask(updatedTask);
+      success = await taskProvider.updateTask(updatedTask);
     } else {
       final newTask = Task(
         title: _titleController.text.trim(),
@@ -465,36 +468,47 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
         dueDate: dueDateTime,
         hasNotification: _hasNotification && dueDateTime != null,
       );
-      taskProvider.addTask(newTask);
+      success = await taskProvider.addTask(newTask);
     }
 
-    Navigator.of(context).pop();
-
-    // Show success message with notification info
-    String message = _isEditing ? 'Task updated successfully' : 'Task added successfully';
-    if (_hasNotification && dueDateTime != null) {
-      final timeUntil = AppUtils.getTimeUntil(dueDateTime);
-      message += '\nReminder set for $timeUntil';
+    if (!success) {
+      if (taskProvider.lastError != null && mounted) {
+        ErrorSnackbar.show(
+          context,
+          taskProvider.lastError!,
+          onRetry: () => _saveTask(),
+        );
+      }
+      return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 3),
-        action: _hasNotification && dueDateTime != null ? 
-          SnackBarAction(
-            label: 'Test Now',
-            onPressed: () {
-              // Show an immediate test notification
-              NotificationService().showInstantNotification(
-                '📋 Task Reminder: ${_titleController.text.trim()}',
-                _descriptionController.text.trim().isNotEmpty 
-                    ? '${_descriptionController.text.trim()}\n\nTap to view details'
-                    : 'Don\'t forget to complete this task!\n\nTap to view details',
-              );
-            },
-          ) : null,
-      ),
-    );
+    if (mounted) {
+      Navigator.of(context).pop();
+
+      String message = _isEditing ? 'Task updated successfully' : 'Task added successfully';
+      if (_hasNotification && dueDateTime != null) {
+        final timeUntil = AppUtils.getTimeUntil(dueDateTime);
+        message += '\nReminder set for $timeUntil';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+          action: _hasNotification && dueDateTime != null ? 
+            SnackBarAction(
+              label: 'Test Now',
+              onPressed: () {
+                NotificationService().showInstantNotification(
+                  '📋 Task Reminder: ${_titleController.text.trim()}',
+                  _descriptionController.text.trim().isNotEmpty 
+                      ? '${_descriptionController.text.trim()}\n\nTap to view details'
+                      : 'Don\'t forget to complete this task!\n\nTap to view details',
+                );
+              },
+            ) : null,
+        ),
+      );
+    }
   }
 }
