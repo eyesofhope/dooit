@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/task.dart';
+import '../providers/task_provider.dart';
 import '../utils/app_utils.dart';
 
+/// TaskCard with Selector optimization. It fetches task data by ID and rebuilds
+/// only when the specific task changes, preventing unnecessary widget rebuilds
+/// when other tasks in the list are modified.
 class TaskCard extends StatelessWidget {
-  final Task task;
-  final VoidCallback? onTap;
-  final VoidCallback? onToggleComplete;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
+  final String taskId;
+  final void Function(Task)? onTap;
+  final void Function(Task)? onToggleComplete;
+  final void Function(Task)? onEdit;
+  final void Function(Task)? onDelete;
 
   const TaskCard({
     super.key,
-    required this.task,
+    required this.taskId,
     this.onTap,
     this.onToggleComplete,
     this.onEdit,
@@ -20,13 +25,37 @@ class TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Selector<TaskProvider, Task?>(
+      selector: (context, provider) => provider.getTaskById(taskId),
+      shouldRebuild: (previous, next) {
+        if (previous == null || next == null) {
+          return previous != next;
+        }
+        return previous.title != next.title ||
+            previous.description != next.description ||
+            previous.dueDate != next.dueDate ||
+            previous.priority != next.priority ||
+            previous.category != next.category ||
+            previous.isCompleted != next.isCompleted ||
+            previous.hasNotification != next.hasNotification;
+      },
+      builder: (context, task, _) {
+        if (task == null) {
+          return const SizedBox.shrink();
+        }
+        return _buildCard(context, task);
+      },
+    );
+  }
+
+  Widget _buildCard(BuildContext context, Task task) {
     final isOverdue = !task.isCompleted && AppUtils.isOverdue(task.dueDate);
     final priorityColor = AppUtils.getPriorityColor(task.priority);
 
     return Card(
       elevation: 2,
       child: InkWell(
-        onTap: onTap,
+        onTap: onTap != null ? () => onTap!(task) : null,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -74,7 +103,8 @@ class TaskCard extends StatelessWidget {
                             // Completion checkbox
                             Checkbox(
                               value: task.isCompleted,
-                              onChanged: (value) => onToggleComplete?.call(),
+                              onChanged: (value) =>
+                                  onToggleComplete?.call(task),
                               shape: const CircleBorder(),
                             ),
                           ],
@@ -171,15 +201,15 @@ class TaskCard extends StatelessWidget {
                     onSelected: (value) {
                       switch (value) {
                         case 'edit':
-                          onEdit?.call();
+                          onEdit?.call(task);
                           break;
                         case 'delete':
-                          onDelete?.call();
+                          onDelete?.call(task);
                           break;
                       }
                     },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
                         value: 'edit',
                         child: ListTile(
                           leading: Icon(Icons.edit),
@@ -187,7 +217,7 @@ class TaskCard extends StatelessWidget {
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'delete',
                         child: ListTile(
                           leading: Icon(Icons.delete),

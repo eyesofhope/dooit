@@ -21,6 +21,7 @@ class FilterChips extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         children: [
           FilterChip(
+            key: const ValueKey('category_all'),
             label: const Text('All'),
             selected: selectedCategory == 'All',
             onSelected: (selected) => onCategorySelected('All'),
@@ -30,6 +31,7 @@ class FilterChips extends StatelessWidget {
             (category) => Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: FilterChip(
+                key: ValueKey('category_${category.name}'),
                 label: Text(category.name),
                 selected: selectedCategory == category.name,
                 onSelected: (selected) => onCategorySelected(category.name),
