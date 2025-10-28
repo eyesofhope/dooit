@@ -6,10 +6,14 @@ class AppConstants {
   static const String appName = 'DoIt';
   static const String appVersion = '1.0.0';
 
+  // Schema version for migrations
+  static const int currentSchemaVersion = 1;
+
   // Hive box names
   static const String tasksBoxName = 'tasks';
   static const String categoriesBoxName = 'categories';
   static const String settingsBoxName = 'settings';
+  static const String versionBoxName = 'version';
 
   // Notification channel
   static const String notificationChannelId = 'task_reminders';

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
+import '../models/category.dart' as models;
 import '../providers/task_provider.dart';
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
@@ -51,34 +52,8 @@ class _TodoScreenState extends State<TodoScreen> {
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
-    final taskProvider = Provider.of<TaskProvider>(context);
-
     return AppBar(
-      title: _isSearching
-          ? SearchBarWidget(
-              controller: _searchController,
-              onChanged: (query) => taskProvider.setSearchQuery(query),
-              onClear: () {
-                _searchController.clear();
-                taskProvider.setSearchQuery('');
-                setState(() {
-                  _isSearching = false;
-                });
-              },
-            )
-          : Row(
-              children: [
-                const Text('DoIt'),
-                const Spacer(),
-                Text(
-                  '${taskProvider.completedTasks}/${taskProvider.totalTasks}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+      title: _isSearching ? _buildSearchField(context) : _buildAppTitle(context),
       actions: [
         if (!_isSearching)
           IconButton(
@@ -91,8 +66,8 @@ class _TodoScreenState extends State<TodoScreen> {
           ),
         PopupMenuButton<String>(
           onSelected: (value) => _handleMenuAction(context, value),
-          itemBuilder: (context) => [
-            const PopupMenuItem(
+          itemBuilder: (context) => const [
+            PopupMenuItem(
               value: 'clear_completed',
               child: ListTile(
                 leading: Icon(Icons.clear_all),
@@ -100,7 +75,7 @@ class _TodoScreenState extends State<TodoScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'test_notification',
               child: ListTile(
                 leading: Icon(Icons.notifications_active),
@@ -108,7 +83,7 @@ class _TodoScreenState extends State<TodoScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'statistics',
               child: ListTile(
                 leading: Icon(Icons.bar_chart),
@@ -116,7 +91,7 @@ class _TodoScreenState extends State<TodoScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'settings',
               child: ListTile(
                 leading: Icon(Icons.settings),
@@ -130,21 +105,95 @@ class _TodoScreenState extends State<TodoScreen> {
     );
   }
 
+  Widget _buildAppTitle(BuildContext context) {
+    // Selector limits rebuilds to changes in completion stats instead of
+    // listening to the entire provider.
+    return Selector<TaskProvider, ({int completed, int total})>(
+      selector: (context, provider) => (
+        completed: provider.completedTasks,
+        total: provider.totalTasks,
+      ),
+      builder: (context, stats, _) {
+        return Row(
+          children: [
+            const Text('DoIt'),
+            const Spacer(),
+            Text(
+              '${stats.completed}/${stats.total}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchField(BuildContext context) {
+    // Selector keeps the search bar in sync with the provider while avoiding
+    // rebuilds from unrelated state changes.
+    return Selector<TaskProvider, String>(
+      selector: (context, provider) => provider.searchQuery,
+      builder: (context, searchQuery, _) {
+        if (_searchController.text != searchQuery) {
+          _searchController.value = TextEditingValue(
+            text: searchQuery,
+            selection: TextSelection.collapsed(offset: searchQuery.length),
+          );
+        }
+
+        return SearchBarWidget(
+          controller: _searchController,
+          onChanged: (query) =>
+              context.read<TaskProvider>().setSearchQuery(query),
+          onClear: () {
+            _searchController.clear();
+            context.read<TaskProvider>().setSearchQuery('');
+            setState(() {
+              _isSearching = false;
+            });
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildStatsCard() {
-    return Consumer<TaskProvider>(
-      builder: (context, taskProvider, child) {
-        if (taskProvider.totalTasks == 0) {
+    // Selector rebuilds the stats card only when aggregated metrics change.
+    return Selector<TaskProvider,
+        ({
+          int total,
+          int completed,
+          int pending,
+          int overdue,
+          double completion,
+        })>(
+      selector: (context, provider) => (
+        total: provider.totalTasks,
+        completed: provider.completedTasks,
+        pending: provider.pendingTasks,
+        overdue: provider.overdueTasks,
+        completion: provider.completionPercentage,
+      ),
+      builder: (
+        context,
+        stats,
+        _,
+      ) {
+        if (stats.total == 0) {
           return const SizedBox.shrink();
         }
 
         return Padding(
           padding: const EdgeInsets.all(16.0),
           child: StatsCard(
-            totalTasks: taskProvider.totalTasks,
-            completedTasks: taskProvider.completedTasks,
-            pendingTasks: taskProvider.pendingTasks,
-            overdueTasks: taskProvider.overdueTasks,
-            completionPercentage: taskProvider.completionPercentage,
+            totalTasks: stats.total,
+            completedTasks: stats.completed,
+            pendingTasks: stats.pending,
+            overdueTasks: stats.overdue,
+            completionPercentage: stats.completion,
           ),
         );
       },
@@ -152,92 +201,118 @@ class _TodoScreenState extends State<TodoScreen> {
   }
 
   Widget _buildFilterSection() {
-    return Consumer<TaskProvider>(
-      builder: (context, taskProvider, child) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Column(
+    final taskProvider = context.read<TaskProvider>();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: FilterChips(
-                      categories: taskProvider.categories,
-                      selectedCategory: taskProvider.selectedCategory,
-                      onCategorySelected: taskProvider.setSelectedCategory,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SortDropdown(
-                    currentSort: taskProvider.currentSort,
-                    onSortChanged: taskProvider.setSortOption,
-                  ),
-                ],
+              Expanded(
+                child: Selector<TaskProvider, List<models.Category>>(
+                  selector: (context, provider) => provider.categories,
+                  builder: (context, categories, _) {
+                    return Selector<TaskProvider, String>(
+                      selector: (context, provider) => provider.selectedCategory,
+                      builder: (context, selectedCategory, __) {
+                        return FilterChips(
+                          categories: categories,
+                          selectedCategory: selectedCategory,
+                          onCategorySelected: taskProvider.setSelectedCategory,
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
-              const SizedBox(height: 8),
-              Row(
+              const SizedBox(width: 8),
+              Selector<TaskProvider, SortOption>(
+                selector: (context, provider) => provider.currentSort,
+                builder: (context, currentSort, _) {
+                  return SortDropdown(
+                    currentSort: currentSort,
+                    onSortChanged: taskProvider.setSortOption,
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Selector<TaskProvider, FilterOption>(
+            selector: (context, provider) => provider.currentFilter,
+            builder: (context, currentFilter, _) {
+              return Row(
                 children: [
                   FilterChip(
+                    key: const ValueKey('filter_all'),
                     label: const Text('All'),
-                    selected: taskProvider.currentFilter == FilterOption.all,
-                    onSelected: (selected) =>
+                    selected: currentFilter == FilterOption.all,
+                    onSelected: (_) =>
                         taskProvider.setFilterOption(FilterOption.all),
                   ),
                   const SizedBox(width: 8),
                   FilterChip(
+                    key: const ValueKey('filter_pending'),
                     label: const Text('Pending'),
-                    selected:
-                        taskProvider.currentFilter == FilterOption.pending,
-                    onSelected: (selected) =>
+                    selected: currentFilter == FilterOption.pending,
+                    onSelected: (_) =>
                         taskProvider.setFilterOption(FilterOption.pending),
                   ),
                   const SizedBox(width: 8),
                   FilterChip(
+                    key: const ValueKey('filter_completed'),
                     label: const Text('Completed'),
-                    selected:
-                        taskProvider.currentFilter == FilterOption.completed,
-                    onSelected: (selected) =>
+                    selected: currentFilter == FilterOption.completed,
+                    onSelected: (_) =>
                         taskProvider.setFilterOption(FilterOption.completed),
                   ),
                   const SizedBox(width: 8),
                   FilterChip(
+                    key: const ValueKey('filter_overdue'),
                     label: const Text('Overdue'),
-                    selected:
-                        taskProvider.currentFilter == FilterOption.overdue,
-                    onSelected: (selected) =>
+                    selected: currentFilter == FilterOption.overdue,
+                    onSelected: (_) =>
                         taskProvider.setFilterOption(FilterOption.overdue),
                   ),
                 ],
-              ),
-            ],
+              );
+            },
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
   Widget _buildTaskList() {
-    return Consumer<TaskProvider>(
-      builder: (context, taskProvider, child) {
-        final tasks = taskProvider.tasks;
-
+    // Selector narrows rebuilds to the filtered task list snapshot.
+    return Selector<TaskProvider, List<Task>>(
+      selector: (context, provider) => provider.tasks,
+      builder: (context, tasks, _) {
         if (tasks.isEmpty) {
           return _buildEmptyState();
         }
 
+        final taskProvider = context.read<TaskProvider>();
+        final taskIds = tasks.map((task) => task.id).toList(growable: false);
+
         return ListView.separated(
+          key: const PageStorageKey('todo_tasks_list'),
           padding: const EdgeInsets.all(16.0),
-          itemCount: tasks.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemCount: taskIds.length,
+          addAutomaticKeepAlives: true,
+          cacheExtent: 400,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
-            final task = tasks[index];
+            final taskId = taskIds[index];
             return TaskCard(
-              task: task,
-              onTap: () => _navigateToTaskDetail(context, task),
-              onToggleComplete: () =>
+              key: ValueKey(taskId),
+              taskId: taskId,
+              onTap: (task) => _navigateToTaskDetail(context, task),
+              onToggleComplete: (task) =>
                   taskProvider.toggleTaskCompletion(task.id),
-              onEdit: () => _showEditTaskDialog(context, task),
-              onDelete: () => _confirmDeleteTask(context, task),
+              onEdit: (task) => _showEditTaskDialog(context, task),
+              onDelete: (task) => _confirmDeleteTask(context, task),
             );
           },
         );
