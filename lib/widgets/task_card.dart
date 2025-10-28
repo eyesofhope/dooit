@@ -13,6 +13,7 @@ class TaskCard extends StatelessWidget {
   final void Function(Task)? onToggleComplete;
   final void Function(Task)? onEdit;
   final void Function(Task)? onDelete;
+  final bool isSelected;
 
   const TaskCard({
     super.key,
@@ -21,6 +22,7 @@ class TaskCard extends StatelessWidget {
     this.onToggleComplete,
     this.onEdit,
     this.onDelete,
+    this.isSelected = false,
   });
 
   @override
@@ -53,15 +55,28 @@ class TaskCard extends StatelessWidget {
     final priorityColor = AppUtils.getPriorityColor(task.priority);
 
     return Card(
-      elevation: 2,
+      elevation: isSelected ? 4 : 2,
+      color: isSelected
+          ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)
+          : null,
       child: InkWell(
         onTap: onTap != null ? () => onTap!(task) : null,
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Container(
+          decoration: isSelected
+              ? BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                )
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Row(
                 children: [
                   // Priority indicator
@@ -238,6 +253,7 @@ class TaskCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

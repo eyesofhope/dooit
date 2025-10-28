@@ -19,6 +19,7 @@ class TaskProvider extends ChangeNotifier {
   SortOption _currentSort = SortOption.createdDate;
   FilterOption _currentFilter = FilterOption.all;
   String _selectedCategory = 'All';
+  String? _selectedTaskId;
 
   // Getters
   List<Task> get tasks => _getFilteredAndSortedTasks();
@@ -28,6 +29,7 @@ class TaskProvider extends ChangeNotifier {
   SortOption get currentSort => _currentSort;
   FilterOption get currentFilter => _currentFilter;
   String get selectedCategory => _selectedCategory;
+  String? get selectedTaskId => _selectedTaskId;
 
   // Statistics
   int get totalTasks => _tasks.length;
@@ -255,6 +257,20 @@ class TaskProvider extends ChangeNotifier {
     _selectedCategory = category;
     notifyListeners();
     developer.Timeline.finishSync();
+  }
+
+  void setSelectedTaskId(String? taskId) {
+    if (_selectedTaskId != taskId) {
+      _selectedTaskId = taskId;
+      notifyListeners();
+    }
+  }
+
+  void clearSelection() {
+    if (_selectedTaskId != null) {
+      _selectedTaskId = null;
+      notifyListeners();
+    }
   }
 
   List<Task> _getFilteredAndSortedTasks() {

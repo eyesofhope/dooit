@@ -7,8 +7,13 @@ import '../widgets/add_edit_task_dialog.dart';
 
 class TaskDetailScreen extends StatelessWidget {
   final String taskId;
+  final bool isInDetailPane;
 
-  const TaskDetailScreen({super.key, required this.taskId});
+  const TaskDetailScreen({
+    super.key,
+    required this.taskId,
+    this.isInDetailPane = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,6 +22,11 @@ class TaskDetailScreen extends StatelessWidget {
       selector: (context, provider) => provider.getTaskById(taskId),
       builder: (context, task, _) {
         if (task == null) {
+          if (isInDetailPane) {
+            return const Center(
+              child: Text('This task no longer exists.'),
+            );
+          }
           return Scaffold(
             appBar: AppBar(title: const Text('Task Not Found')),
             body: const Center(child: Text('This task no longer exists.')),
@@ -24,11 +34,101 @@ class TaskDetailScreen extends StatelessWidget {
         }
 
         final taskProvider = context.read<TaskProvider>();
+        
+        if (isInDetailPane) {
+          return Column(
+            children: [
+              _buildDetailPaneAppBar(context, task, taskProvider),
+              Expanded(
+                child: _buildBody(context, task, taskProvider),
+              ),
+            ],
+          );
+        }
+        
         return Scaffold(
           appBar: _buildAppBar(context, task, taskProvider),
           body: _buildBody(context, task, taskProvider),
         );
       },
+    );
+  }
+
+  Widget _buildDetailPaneAppBar(
+    BuildContext context,
+    Task task,
+    TaskProvider taskProvider,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => taskProvider.clearSelection(),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Task Details',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () => _showEditDialog(context, task),
+              ),
+              PopupMenuButton<String>(
+                onSelected: (value) =>
+                    _handleMenuAction(context, value, task, taskProvider, true),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'toggle_complete',
+                    child: ListTile(
+                      leading: Icon(
+                        task.isCompleted
+                            ? Icons.radio_button_unchecked
+                            : Icons.check_circle,
+                      ),
+                      title: Text(
+                        task.isCompleted ? 'Mark as Pending' : 'Mark as Complete',
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'duplicate',
+                    child: ListTile(
+                      leading: Icon(Icons.copy),
+                      title: Text('Duplicate'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: ListTile(
+                      leading: Icon(Icons.delete),
+                      title: Text('Delete'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -46,7 +146,7 @@ class TaskDetailScreen extends StatelessWidget {
         ),
         PopupMenuButton<String>(
           onSelected: (value) =>
-              _handleMenuAction(context, value, task, taskProvider),
+              _handleMenuAction(context, value, task, taskProvider, false),
           itemBuilder: (context) => [
             PopupMenuItem(
               value: 'toggle_complete',
@@ -349,6 +449,7 @@ class TaskDetailScreen extends StatelessWidget {
     String action,
     Task task,
     TaskProvider taskProvider,
+    bool isInDetailPane,
   ) {
     switch (action) {
       case 'toggle_complete':
@@ -368,7 +469,7 @@ class TaskDetailScreen extends StatelessWidget {
         _duplicateTask(context, task, taskProvider);
         break;
       case 'delete':
-        _confirmDeleteTask(context, task, taskProvider);
+        _confirmDeleteTask(context, task, taskProvider, isInDetailPane);
         break;
     }
   }
@@ -401,6 +502,7 @@ class TaskDetailScreen extends StatelessWidget {
     BuildContext context,
     Task task,
     TaskProvider taskProvider,
+    bool isInDetailPane,
   ) {
     showDialog(
       context: context,
@@ -416,7 +518,13 @@ class TaskDetailScreen extends StatelessWidget {
             onPressed: () {
               taskProvider.deleteTask(task.id);
               Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Go back to previous screen
+              
+              if (isInDetailPane) {
+                taskProvider.clearSelection();
+              } else {
+                Navigator.of(context).pop(); // Go back to previous screen
+              }
+              
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Task "${task.title}" deleted'),
