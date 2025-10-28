@@ -1,6 +1,8 @@
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 
+import 'subtask.dart';
+
 part 'task.g.dart';
 
 @HiveType(typeId: 0)
@@ -45,6 +47,9 @@ class Task extends HiveObject {
   @HiveField(9)
   bool hasNotification;
 
+  @HiveField(10)
+  List<Subtask> subtasks;
+
   Task({
     String? id,
     required this.title,
@@ -56,8 +61,10 @@ class Task extends HiveObject {
     DateTime? createdAt,
     this.completedAt,
     this.hasNotification = false,
-  }) : id = id ?? const Uuid().v4(),
-       createdAt = createdAt ?? DateTime.now();
+    List<Subtask>? subtasks,
+  })  : id = id ?? const Uuid().v4(),
+        createdAt = createdAt ?? DateTime.now(),
+        subtasks = List<Subtask>.from(subtasks ?? const []);
 
   Task copyWith({
     String? id,
@@ -70,6 +77,7 @@ class Task extends HiveObject {
     DateTime? createdAt,
     DateTime? completedAt,
     bool? hasNotification,
+    List<Subtask>? subtasks,
   }) {
     return Task(
       id: id ?? this.id,
@@ -82,12 +90,26 @@ class Task extends HiveObject {
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
       hasNotification: hasNotification ?? this.hasNotification,
+      subtasks: subtasks != null
+          ? List<Subtask>.from(subtasks)
+          : List<Subtask>.from(this.subtasks),
     );
   }
 
+  int get completedSubtasksCount =>
+      subtasks.where((subtask) => subtask.isCompleted).length;
+
+  int get totalSubtasksCount => subtasks.length;
+
+  double get subtaskCompletionPercentage => totalSubtasksCount == 0
+      ? 0
+      : (completedSubtasksCount / totalSubtasksCount) * 100;
+
+  bool get hasSubtasks => subtasks.isNotEmpty;
+
   @override
   String toString() {
-    return 'Task{id: $id, title: $title, isCompleted: $isCompleted, priority: $priority, category: $category}';
+    return 'Task{id: $id, title: $title, isCompleted: $isCompleted, priority: $priority, category: $category, subtasks: ${subtasks.length}}';
   }
 
   @override

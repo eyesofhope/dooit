@@ -20,6 +20,8 @@ class SettingsProvider extends ChangeNotifier {
   String? get defaultCategoryId => _settings.defaultCategoryId;
   TimeOfDay get defaultReminderTime => _settings.defaultReminderTime;
   DefaultDueDate get defaultDueDate => _settings.defaultDueDate;
+  bool get autoCompleteSubtasks => _settings.autoCompleteSubtasks;
+  bool get remindIncompleteSubtasks => _settings.remindIncompleteSubtasks;
 
   Future<void> initialize() async {
     try {
@@ -83,6 +85,20 @@ class SettingsProvider extends ChangeNotifier {
     await _saveSettings();
     notifyListeners();
     debugPrint('Notification vibration changed to: $value');
+  }
+
+  Future<void> setAutoCompleteSubtasks(bool value) async {
+    _settings.autoCompleteSubtasks = value;
+    await _saveSettings();
+    notifyListeners();
+    debugPrint('Auto-complete subtasks changed to: $value');
+  }
+
+  Future<void> setRemindIncompleteSubtasks(bool value) async {
+    _settings.remindIncompleteSubtasks = value;
+    await _saveSettings();
+    notifyListeners();
+    debugPrint('Remind incomplete subtasks changed to: $value');
   }
 
   Future<void> setDefaultPriority(TaskPriority priority) async {

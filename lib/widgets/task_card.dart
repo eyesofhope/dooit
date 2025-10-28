@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
@@ -39,7 +40,8 @@ class TaskCard extends StatelessWidget {
             previous.priority != next.priority ||
             previous.category != next.category ||
             previous.isCompleted != next.isCompleted ||
-            previous.hasNotification != next.hasNotification;
+            previous.hasNotification != next.hasNotification ||
+            !listEquals(previous.subtasks, next.subtasks);
       },
       builder: (context, task, _) {
         if (task == null) {
@@ -106,16 +108,15 @@ class TaskCard extends StatelessWidget {
                                           : null,
                                       color: task.isCompleted
                                           ? Theme.of(context)
-                                                .colorScheme
-                                                .onSurface
-                                                .withOpacity(0.6)
+                                              .colorScheme
+                                              .onSurface
+                                              .withOpacity(0.6)
                                           : null,
                                     ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // Completion checkbox
                             Checkbox(
                               value: task.isCompleted,
                               onChanged: (value) =>
@@ -130,15 +131,48 @@ class TaskCard extends StatelessWidget {
                             task.description,
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface.withOpacity(0.7),
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withOpacity(0.7),
                                   decoration: task.isCompleted
                                       ? TextDecoration.lineThrough
                                       : null,
                                 ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        if (task.hasSubtasks) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value:
+                                        task.subtaskCompletionPercentage / 100,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Theme.of(context).colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${task.completedSubtasksCount}/${task.totalSubtasksCount}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ],
                           ),
                         ],
                       ],
@@ -149,7 +183,7 @@ class TaskCard extends StatelessWidget {
               const SizedBox(height: 12),
               // Task metadata
               Row(
-                children: [
+
                   // Category chip
                   Container(
                     padding: const EdgeInsets.symmetric(

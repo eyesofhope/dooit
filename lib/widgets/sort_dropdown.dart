@@ -56,6 +56,14 @@ class SortDropdown extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        const PopupMenuItem(
+          value: SortOption.subtaskProgress,
+          child: ListTile(
+            leading: Icon(Icons.checklist),
+            title: Text('Subtask Progress'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -100,6 +108,8 @@ class SortDropdown extends StatelessWidget {
         return 'A-Z';
       case SortOption.completionStatus:
         return 'Status';
+      case SortOption.subtaskProgress:
+        return 'Subtasks';
     }
   }
 }
