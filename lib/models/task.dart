@@ -51,7 +51,7 @@ class Task extends HiveObject {
     this.description = '',
     this.dueDate,
     this.priority = TaskPriority.medium,
-    this.category = 'General',
+    this.category = 'Personal',
     this.isCompleted = false,
     DateTime? createdAt,
     this.completedAt,

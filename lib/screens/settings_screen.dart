@@ -10,6 +10,7 @@ import '../providers/settings_provider.dart';
 import '../providers/task_provider.dart';
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
+import 'category_manager_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -301,6 +302,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Consumer2<SettingsProvider, TaskProvider>(
       builder: (context, settingsProvider, taskProvider, child) {
         final categories = taskProvider.categories;
+        final defaultCategoryId = settingsProvider.defaultCategoryId;
+        final defaultCategoryLabel = defaultCategoryId == null
+            ? 'None (Ask every time)'
+            : defaultCategoryId == AppConstants.uncategorizedCategory
+                ? 'Uncategorized'
+                : categories.any((cat) => cat.name == defaultCategoryId)
+                    ? defaultCategoryId
+                    : 'Category removed';
         
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,6 +319,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Column(
                 children: [
+                  ListTile(
+                    leading: Icon(Icons.category_outlined, color: colorScheme.primary),
+                    title: const Text('Manage Categories'),
+                    subtitle: const Text('Create, edit, and reorder categories'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const CategoryManagerScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildDivider(),
                   ListTile(
                     leading: Icon(Icons.flag_outlined, color: colorScheme.primary),
                     title: const Text('Default Priority'),
@@ -345,14 +368,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ListTile(
                     leading: Icon(Icons.category_outlined, color: colorScheme.primary),
                     title: const Text('Default Category'),
-                    subtitle: Text(
-                      settingsProvider.defaultCategoryId == null
-                          ? 'None (Ask every time)'
-                          : categories.firstWhere(
-                              (cat) => cat.name == settingsProvider.defaultCategoryId,
-                              orElse: () => categories.first,
-                            ).name,
-                    ),
+                    subtitle: Text(defaultCategoryLabel),
                     trailing: DropdownButton<String?>(
                       value: settingsProvider.defaultCategoryId,
                       underline: const SizedBox(),
@@ -360,6 +376,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const DropdownMenuItem(
                           value: null,
                           child: Text('None'),
+                        ),
+                        const DropdownMenuItem(
+                          value: AppConstants.uncategorizedCategory,
+                          child: Text('Uncategorized'),
                         ),
                         ...categories.map((category) {
                           return DropdownMenuItem(

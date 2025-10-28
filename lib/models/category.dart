@@ -44,12 +44,10 @@ class Category extends HiveObject {
   // Default categories
   static List<Category> getDefaultCategories() {
     return [
-      Category(name: 'General', colorValue: Colors.blue.value),
+      Category(name: 'Personal', colorValue: Colors.blue.value),
       Category(name: 'Work', colorValue: Colors.orange.value),
-      Category(name: 'Personal', colorValue: Colors.green.value),
-      Category(name: 'Shopping', colorValue: Colors.purple.value),
+      Category(name: 'Shopping', colorValue: Colors.green.value),
       Category(name: 'Health', colorValue: Colors.red.value),
-      Category(name: 'Education', colorValue: Colors.indigo.value),
     ];
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/category.dart' as models;
+import '../utils/app_utils.dart';
 
 class FilterChips extends StatelessWidget {
   final List<models.Category> categories;
@@ -23,8 +24,17 @@ class FilterChips extends StatelessWidget {
           FilterChip(
             key: const ValueKey('category_all'),
             label: const Text('All'),
-            selected: selectedCategory == 'All',
-            onSelected: (selected) => onCategorySelected('All'),
+            selected: selectedCategory == AppConstants.systemCategoryAll,
+            onSelected: (selected) => onCategorySelected(AppConstants.systemCategoryAll),
+          ),
+          const SizedBox(width: 8),
+          FilterChip(
+            key: const ValueKey('category_uncategorized'),
+            label: const Text('Uncategorized'),
+            selected:
+                selectedCategory == AppConstants.uncategorizedCategory,
+            onSelected: (selected) =>
+                onCategorySelected(AppConstants.uncategorizedCategory),
           ),
           const SizedBox(width: 8),
           ...categories.map(

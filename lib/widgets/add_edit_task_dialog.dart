@@ -201,39 +201,78 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: categories.any((cat) => cat.name == _selectedCategory)
-                  ? _selectedCategory
-                  : categories.first.name,
-              decoration: const InputDecoration(
-                hintText: 'Select category',
-                prefixIcon: Icon(Icons.category),
-              ),
-              items: categories.map((category) {
-                return DropdownMenuItem<String>(
-                  value: category.name,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: category.color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(category.name),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _selectedCategory = value;
-                  });
+            Builder(
+              builder: (context) {
+                final categoryNames =
+                    categories.map((category) => category.name).toList();
+
+                if (!categoryNames.contains(AppConstants.uncategorizedCategory)) {
+                  categoryNames.add(AppConstants.uncategorizedCategory);
                 }
+
+                final fallback = categories.isNotEmpty
+                    ? categories.first.name
+                    : AppConstants.uncategorizedCategory;
+                final selectedValue = categoryNames.contains(_selectedCategory)
+                    ? _selectedCategory
+                    : fallback;
+
+                if (_selectedCategory != selectedValue) {
+                  _selectedCategory = selectedValue;
+                }
+
+                return DropdownButtonFormField<String>(
+                  value: selectedValue,
+                  decoration: const InputDecoration(
+                    hintText: 'Select category',
+                    prefixIcon: Icon(Icons.category),
+                  ),
+                  items: [
+                    ...categories.map((category) {
+                      return DropdownMenuItem<String>(
+                        value: category.name,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: category.color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(category.name),
+                          ],
+                        ),
+                      );
+                    }),
+                    DropdownMenuItem<String>(
+                      value: AppConstants.uncategorizedCategory,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              color: Colors.grey,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Uncategorized'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedCategory = value;
+                      });
+                    }
+                  },
+                );
               },
             ),
           ],
