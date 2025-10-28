@@ -51,3 +51,11 @@ app.*.map.json
 *.g.dart
 *.freezed.dart
 *.mocks.dart
+
+# Test coverage
+coverage/
+test/.test_coverage.dart
+*.lcov
+
+# Golden test failures
+test/**/failures/
