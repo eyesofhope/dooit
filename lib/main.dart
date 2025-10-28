@@ -5,6 +5,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 
 import 'models/task.dart';
+import 'models/subtask.dart';
 import 'models/category.dart' as models;
 import 'models/app_version.dart';
 import 'models/app_settings.dart';
@@ -23,8 +24,9 @@ void main() async {
   await Hive.initFlutter();
 
   // Register Hive adapters
-  Hive.registerAdapter(TaskAdapter());
   Hive.registerAdapter(TaskPriorityAdapter());
+  Hive.registerAdapter(SubtaskAdapter());
+  Hive.registerAdapter(TaskAdapter());
   Hive.registerAdapter(models.CategoryAdapter());
   Hive.registerAdapter(AppVersionAdapter());
   Hive.registerAdapter(DefaultDueDateAdapter());

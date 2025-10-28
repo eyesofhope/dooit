@@ -48,6 +48,12 @@ class AppSettings extends HiveObject {
   @HiveField(9)
   DefaultDueDate defaultDueDate;
 
+  @HiveField(10)
+  bool autoCompleteSubtasks;
+
+  @HiveField(11)
+  bool remindIncompleteSubtasks;
+
   AppSettings({
     this.themeMode = 'system',
     this.useDynamicColors = true,
@@ -59,6 +65,8 @@ class AppSettings extends HiveObject {
     this.defaultReminderHour = 9,
     this.defaultReminderMinute = 0,
     this.defaultDueDate = DefaultDueDate.none,
+    this.autoCompleteSubtasks = false,
+    this.remindIncompleteSubtasks = false,
   });
 
   ThemeMode get themeModeEnum {
@@ -91,6 +99,8 @@ class AppSettings extends HiveObject {
     int? defaultReminderHour,
     int? defaultReminderMinute,
     DefaultDueDate? defaultDueDate,
+    bool? autoCompleteSubtasks,
+    bool? remindIncompleteSubtasks,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -103,6 +113,9 @@ class AppSettings extends HiveObject {
       defaultReminderHour: defaultReminderHour ?? this.defaultReminderHour,
       defaultReminderMinute: defaultReminderMinute ?? this.defaultReminderMinute,
       defaultDueDate: defaultDueDate ?? this.defaultDueDate,
+      autoCompleteSubtasks: autoCompleteSubtasks ?? this.autoCompleteSubtasks,
+      remindIncompleteSubtasks:
+          remindIncompleteSubtasks ?? this.remindIncompleteSubtasks,
     );
   }
 

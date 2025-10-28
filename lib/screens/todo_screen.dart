@@ -168,6 +168,10 @@ class _TodoScreenState extends State<TodoScreen> {
           int pending,
           int overdue,
           double completion,
+          int tasksWithSubtasks,
+          int totalSubtasks,
+          int completedSubtasks,
+          double subtaskCompletion,
         })>(
       selector: (context, provider) => (
         total: provider.totalTasks,
@@ -175,6 +179,10 @@ class _TodoScreenState extends State<TodoScreen> {
         pending: provider.pendingTasks,
         overdue: provider.overdueTasks,
         completion: provider.completionPercentage,
+        tasksWithSubtasks: provider.tasksWithSubtasks,
+        totalSubtasks: provider.totalSubtasksCount,
+        completedSubtasks: provider.completedSubtasksCount,
+        subtaskCompletion: provider.overallSubtaskCompletionPercentage,
       ),
       builder: (
         context,
@@ -193,6 +201,10 @@ class _TodoScreenState extends State<TodoScreen> {
             pendingTasks: stats.pending,
             overdueTasks: stats.overdue,
             completionPercentage: stats.completion,
+            tasksWithSubtasks: stats.tasksWithSubtasks,
+            totalSubtasks: stats.totalSubtasks,
+            completedSubtasks: stats.completedSubtasks,
+            subtaskCompletionPercentage: stats.subtaskCompletion,
           ),
         );
       },
@@ -273,6 +285,15 @@ class _TodoScreenState extends State<TodoScreen> {
                     selected: currentFilter == FilterOption.overdue,
                     onSelected: (_) =>
                         taskProvider.setFilterOption(FilterOption.overdue),
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    key: const ValueKey('filter_incomplete_subtasks'),
+                    label: const Text('Has incomplete subtasks'),
+                    selected:
+                        currentFilter == FilterOption.incompleteSubtasks,
+                    onSelected: (_) => taskProvider
+                        .setFilterOption(FilterOption.incompleteSubtasks),
                   ),
                 ],
               );

@@ -63,9 +63,10 @@ enum SortOption {
   createdDate,
   alphabetical,
   completionStatus,
+  subtaskProgress,
 }
 
-enum FilterOption { all, completed, pending, overdue }
+enum FilterOption { all, completed, pending, overdue, incompleteSubtasks }
 
 class AppUtils {
   static String getPriorityLabel(TaskPriority priority) {
@@ -153,9 +154,18 @@ class AppUtils {
           (a, b) => a.isCompleted == b.isCompleted
               ? 0
               : a.isCompleted
-              ? 1
-              : -1,
+                  ? 1
+                  : -1,
         );
+        break;
+      case SortOption.subtaskProgress:
+        sortedTasks.sort((a, b) {
+          if (!a.hasSubtasks && !b.hasSubtasks) return 0;
+          if (!a.hasSubtasks) return 1;
+          if (!b.hasSubtasks) return -1;
+          return b.subtaskCompletionPercentage
+              .compareTo(a.subtaskCompletionPercentage);
+        });
         break;
     }
 
@@ -173,6 +183,14 @@ class AppUtils {
       case FilterOption.overdue:
         return tasks
             .where((task) => !task.isCompleted && isOverdue(task.dueDate))
+            .toList();
+      case FilterOption.incompleteSubtasks:
+        return tasks
+            .where(
+              (task) =>
+                  task.hasSubtasks &&
+                  task.completedSubtasksCount < task.totalSubtasksCount,
+            )
             .toList();
     }
   }

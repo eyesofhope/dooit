@@ -265,6 +265,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     },
                   ),
                   _buildDivider(),
+                  SwitchListTile(
+                    secondary: Icon(Icons.checklist, color: colorScheme.primary),
+                    title: const Text('Remind me of incomplete subtasks'),
+                    subtitle: const Text('Include subtask status in task reminders'),
+                    value: settingsProvider.remindIncompleteSubtasks,
+                    onChanged: (value) {
+                      settingsProvider.setRemindIncompleteSubtasks(value);
+                    },
+                  ),
+                  _buildDivider(),
                   ListTile(
                     leading: Icon(Icons.notifications_active, color: colorScheme.primary),
                     title: const Text('Test Notification'),
@@ -413,6 +423,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         }
                       },
                     ),
+                  ),
+                  _buildDivider(),
+                  SwitchListTile(
+                    secondary: Icon(Icons.task_alt, color: colorScheme.primary),
+                    title: const Text('Auto-complete tasks from subtasks'),
+                    subtitle: const Text('Mark a task complete when all subtasks are done'),
+                    value: settingsProvider.autoCompleteSubtasks,
+                    onChanged: (value) {
+                      settingsProvider.setAutoCompleteSubtasks(value);
+                      taskProvider.setAutoCompleteTasksWithSubtasks(value);
+                    },
                   ),
                 ],
               ),

@@ -6,6 +6,10 @@ class StatsCard extends StatelessWidget {
   final int pendingTasks;
   final int overdueTasks;
   final double completionPercentage;
+  final int tasksWithSubtasks;
+  final int totalSubtasks;
+  final int completedSubtasks;
+  final double subtaskCompletionPercentage;
 
   const StatsCard({
     super.key,
@@ -14,6 +18,10 @@ class StatsCard extends StatelessWidget {
     required this.pendingTasks,
     required this.overdueTasks,
     required this.completionPercentage,
+    required this.tasksWithSubtasks,
+    required this.totalSubtasks,
+    required this.completedSubtasks,
+    required this.subtaskCompletionPercentage,
   });
 
   @override
@@ -94,6 +102,47 @@ class StatsCard extends StatelessWidget {
                   ),
               ],
             ),
+            if (totalSubtasks > 0) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Subtasks',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  Text(
+                    '${subtaskCompletionPercentage.toStringAsFixed(1)}%',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.secondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: subtaskCompletionPercentage / 100,
+                backgroundColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '$completedSubtasks of $totalSubtasks subtasks completed • '
+                '$tasksWithSubtasks tasks',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.7),
+                    ),
+              ),
+            ],
           ],
         ),
       ),

@@ -1,8 +1,11 @@
 import 'dart:developer' as developer;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/task.dart';
+import '../models/subtask.dart';
+import '../models/app_settings.dart';
 import '../models/category.dart' as models;
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
@@ -10,6 +13,7 @@ import '../utils/app_utils.dart';
 class TaskProvider extends ChangeNotifier {
   Box<Task>? _tasksBox;
   Box<models.Category>? _categoriesBox;
+  Box<AppSettings>? _settingsBox;
   final NotificationService _notificationService = NotificationService();
 
   // State variables
@@ -20,6 +24,8 @@ class TaskProvider extends ChangeNotifier {
   FilterOption _currentFilter = FilterOption.all;
   String _selectedCategory = 'All';
   String? _selectedTaskId;
+  bool _autoCompleteTasksWithSubtasks = false;
+  bool _remindIncompleteSubtasks = false;
 
   // Getters
   List<Task> get tasks => _getFilteredAndSortedTasks();
@@ -30,6 +36,8 @@ class TaskProvider extends ChangeNotifier {
   FilterOption get currentFilter => _currentFilter;
   String get selectedCategory => _selectedCategory;
   String? get selectedTaskId => _selectedTaskId;
+  bool get autoCompleteTasksWithSubtasks => _autoCompleteTasksWithSubtasks;
+  bool get remindIncompleteSubtasks => _remindIncompleteSubtasks;
 
   // Statistics
   int get totalTasks => _tasks.length;
@@ -38,10 +46,24 @@ class TaskProvider extends ChangeNotifier {
   int get overdueTasks => _tasks
       .where((task) => !task.isCompleted && AppUtils.isOverdue(task.dueDate))
       .length;
+  int get tasksWithSubtasks => _tasks.where((task) => task.hasSubtasks).length;
+  int get totalSubtasksCount => _tasks.fold<int>(
+        0,
+        (sum, task) => sum + task.totalSubtasksCount,
+      );
+  int get completedSubtasksCount => _tasks.fold<int>(
+        0,
+        (sum, task) => sum + task.completedSubtasksCount,
+      );
 
   double get completionPercentage {
     if (_tasks.isEmpty) return 0.0;
     return (completedTasks / totalTasks) * 100;
+  }
+
+  double get overallSubtaskCompletionPercentage {
+    if (totalSubtasksCount == 0) return 0.0;
+    return (completedSubtasksCount / totalSubtasksCount) * 100;
   }
 
   // Initialize the provider
@@ -51,10 +73,14 @@ class TaskProvider extends ChangeNotifier {
       _categoriesBox = await Hive.openBox<models.Category>(
         AppConstants.categoriesBoxName,
       );
+      _settingsBox = await Hive.openBox<AppSettings>(
+        AppConstants.settingsBoxName,
+      );
 
       // Load existing data
       await _loadTasks();
       await _loadCategories();
+      await _loadSettings();
 
       // Initialize default categories if none exist
       if (_categories.isEmpty) {
@@ -71,7 +97,17 @@ class TaskProvider extends ChangeNotifier {
 
   Future<void> _loadTasks() async {
     if (_tasksBox != null) {
-      _tasks = _tasksBox!.values.toList();
+      final tasks = _tasksBox!.values.toList();
+      for (var i = 0; i < tasks.length; i++) {
+        final task = tasks[i];
+        final normalizedSubtasks = _sortedSubtasks(task.subtasks);
+        if (!_areSubtaskListsEqual(task.subtasks, normalizedSubtasks)) {
+          final updatedTask = task.copyWith(subtasks: normalizedSubtasks);
+          await _tasksBox!.putAt(i, updatedTask);
+          tasks[i] = updatedTask;
+        }
+      }
+      _tasks = tasks;
       notifyListeners();
     }
   }
@@ -80,6 +116,16 @@ class TaskProvider extends ChangeNotifier {
     if (_categoriesBox != null) {
       _categories = _categoriesBox!.values.toList();
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    if (_settingsBox != null && _settingsBox!.isNotEmpty) {
+      final settings = _settingsBox!.getAt(0);
+      if (settings != null) {
+        _autoCompleteTasksWithSubtasks = settings.autoCompleteSubtasks;
+        _remindIncompleteSubtasks = settings.remindIncompleteSubtasks;
+      }
     }
   }
 
@@ -167,6 +213,244 @@ class TaskProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error toggling task completion: $e');
+    }
+  }
+
+  // Subtask operations
+  Future<Subtask?> addSubtask(String taskId, String title) async {
+    try {
+      final trimmedTitle = title.trim();
+      if (trimmedTitle.isEmpty) return null;
+
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      final nextOrder = task.subtasks.isEmpty
+          ? 0
+          : task.subtasks.map((subtask) => subtask.order).reduce(math.max) + 1;
+
+      final newSubtask = Subtask(
+        title: trimmedTitle,
+        order: nextOrder,
+      );
+
+      final updatedSubtasks = List<Subtask>.from(task.subtasks)..add(newSubtask);
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return normalized.firstWhere(
+        (subtask) => subtask.id == newSubtask.id,
+        orElse: () => newSubtask,
+      );
+    } catch (e) {
+      debugPrint('Error adding subtask: $e');
+      return null;
+    }
+  }
+
+  Future<Task?> toggleSubtaskCompletion(String taskId, String subtaskId) async {
+    try {
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      final updatedSubtasks = task.subtasks.map((subtask) {
+        if (subtask.id != subtaskId) return subtask;
+        final nowCompleted = !subtask.isCompleted;
+        return subtask.copyWith(
+          isCompleted: nowCompleted,
+          completedAt: nowCompleted ? DateTime.now() : null,
+        );
+      }).toList();
+
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return updatedTask;
+    } catch (e) {
+      debugPrint('Error toggling subtask completion: $e');
+      return null;
+    }
+  }
+
+  Future<Task?> updateSubtaskTitle(
+    String taskId,
+    String subtaskId,
+    String newTitle,
+  ) async {
+    try {
+      final trimmedTitle = newTitle.trim();
+      if (trimmedTitle.isEmpty) return null;
+
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      final updatedSubtasks = task.subtasks.map((subtask) {
+        if (subtask.id == subtaskId) {
+          return subtask.copyWith(title: trimmedTitle);
+        }
+        return subtask;
+      }).toList();
+
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return updatedTask;
+    } catch (e) {
+      debugPrint('Error updating subtask: $e');
+      return null;
+    }
+  }
+
+  Future<({Subtask subtask, int index})?> deleteSubtask(
+    String taskId,
+    String subtaskId,
+  ) async {
+    try {
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      final subtaskIndex =
+          task.subtasks.indexWhere((item) => item.id == subtaskId);
+      if (subtaskIndex == -1) return null;
+      final subtask = task.subtasks[subtaskIndex];
+
+      final updatedSubtasks =
+          task.subtasks.where((subtask) => subtask.id != subtaskId).toList();
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return (subtask: subtask, index: subtaskIndex);
+    } catch (e) {
+      debugPrint('Error deleting subtask: $e');
+      return null;
+    }
+  }
+
+  Future<Task?> restoreSubtask(
+    String taskId,
+    Subtask subtask, {
+    int? atIndex,
+  }) async {
+    try {
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      final updatedSubtasks = List<Subtask>.from(task.subtasks);
+      final targetIndex = atIndex != null
+          ? atIndex < 0
+              ? 0
+              : atIndex > updatedSubtasks.length
+                  ? updatedSubtasks.length
+                  : atIndex
+          : updatedSubtasks.length;
+
+      final adjustedSubtask = subtask.copyWith(order: targetIndex);
+      updatedSubtasks.insert(targetIndex, adjustedSubtask);
+
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return updatedTask;
+    } catch (e) {
+      debugPrint('Error restoring subtask: $e');
+      return null;
+    }
+  }
+
+  Future<Task?> reorderSubtasks(
+    String taskId,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    try {
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      if (oldIndex < 0 || oldIndex >= task.subtasks.length) {
+        return task;
+      }
+
+      var targetIndex = newIndex;
+      if (targetIndex > task.subtasks.length) {
+        targetIndex = task.subtasks.length;
+      }
+
+      final updatedSubtasks = List<Subtask>.from(task.subtasks);
+      final subtask = updatedSubtasks.removeAt(oldIndex);
+      if (targetIndex > oldIndex) {
+        targetIndex -= 1;
+      }
+      if (targetIndex < 0) {
+        targetIndex = 0;
+      }
+      updatedSubtasks.insert(targetIndex, subtask);
+
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return updatedTask;
+    } catch (e) {
+      debugPrint('Error reordering subtasks: $e');
+      return null;
+    }
+  }
+
+  Future<Task?> completeAllSubtasks(String taskId) async {
+    try {
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      if (task.subtasks.isEmpty) return task;
+
+      final updatedSubtasks = task.subtasks
+          .map(
+            (subtask) => subtask.copyWith(
+              isCompleted: true,
+              completedAt: DateTime.now(),
+            ),
+          )
+          .toList();
+
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return updatedTask;
+    } catch (e) {
+      debugPrint('Error completing all subtasks: $e');
+      return null;
+    }
+  }
+
+  Future<Task?> clearCompletedSubtasks(String taskId) async {
+    try {
+      final index = _tasks.indexWhere((task) => task.id == taskId);
+      if (index == -1) return null;
+
+      final task = _tasks[index];
+      final updatedSubtasks =
+          task.subtasks.where((subtask) => !subtask.isCompleted).toList();
+      final normalized = _sortedSubtasks(updatedSubtasks);
+      final updatedTask = _applyParentCompletionState(task, normalized);
+
+      await updateTask(updatedTask);
+      return updatedTask;
+    } catch (e) {
+      debugPrint('Error clearing completed subtasks: $e');
+      return null;
     }
   }
 
@@ -273,6 +557,18 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  void setAutoCompleteTasksWithSubtasks(bool value) {
+    if (_autoCompleteTasksWithSubtasks == value) return;
+    _autoCompleteTasksWithSubtasks = value;
+    notifyListeners();
+  }
+
+  void setRemindIncompleteSubtasks(bool value) {
+    if (_remindIncompleteSubtasks == value) return;
+    _remindIncompleteSubtasks = value;
+    notifyListeners();
+  }
+
   List<Task> _getFilteredAndSortedTasks() {
     developer.Timeline.startSync('TaskProvider._getFilteredAndSortedTasks');
     try {
@@ -283,7 +579,10 @@ class TaskProvider extends ChangeNotifier {
         filteredTasks = filteredTasks.where((task) {
           return task.title.toLowerCase().contains(_searchQuery) ||
               task.description.toLowerCase().contains(_searchQuery) ||
-              task.category.toLowerCase().contains(_searchQuery);
+              task.category.toLowerCase().contains(_searchQuery) ||
+              task.subtasks.any(
+                (subtask) => subtask.title.toLowerCase().contains(_searchQuery),
+              );
         }).toList();
       }
 
@@ -335,15 +634,70 @@ class TaskProvider extends ChangeNotifier {
     return stats;
   }
 
+  List<Subtask> _sortedSubtasks(List<Subtask> subtasks) {
+    final sorted = List<Subtask>.from(subtasks)
+      ..sort((a, b) => a.order.compareTo(b.order));
+    for (var i = 0; i < sorted.length; i++) {
+      if (sorted[i].order != i) {
+        sorted[i] = sorted[i].copyWith(order: i);
+      }
+    }
+    return sorted;
+  }
+
+  bool _areSubtaskListsEqual(List<Subtask> a, List<Subtask> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].order != b[i].order) {
+        return false;
+      }
+      if (a[i].title != b[i].title || a[i].isCompleted != b[i].isCompleted) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Task _applyParentCompletionState(Task task, List<Subtask> subtasks) {
+    final hasSubtasks = subtasks.isNotEmpty;
+    final allCompleted = hasSubtasks &&
+        subtasks.every((subtask) => subtask.isCompleted);
+
+    var isCompleted = task.isCompleted;
+    var completedAt = task.completedAt;
+
+    if (_autoCompleteTasksWithSubtasks) {
+      if (allCompleted) {
+        if (!task.isCompleted) {
+          isCompleted = true;
+          completedAt = DateTime.now();
+        }
+      } else if (task.isCompleted) {
+        isCompleted = false;
+        completedAt = null;
+      }
+    }
+
+    return task.copyWith(
+      subtasks: subtasks,
+      isCompleted: isCompleted,
+      completedAt: completedAt,
+    );
+  }
+
   // Clear all data (for testing or reset purposes)
   Future<void> clearAllData() async {
     try {
       await _tasksBox?.clear();
       await _categoriesBox?.clear();
+      await _settingsBox?.clear();
       await _notificationService.cancelAllNotifications();
 
       _tasks.clear();
       _categories.clear();
+      _autoCompleteTasksWithSubtasks = false;
+      _remindIncompleteSubtasks = false;
 
       await _initializeDefaultCategories();
       notifyListeners();
@@ -358,6 +712,7 @@ class TaskProvider extends ChangeNotifier {
   void dispose() {
     _tasksBox?.close();
     _categoriesBox?.close();
+    _settingsBox?.close();
     super.dispose();
   }
 }
