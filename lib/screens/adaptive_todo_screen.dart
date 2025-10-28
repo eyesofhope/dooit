@@ -19,6 +19,7 @@ import '../widgets/adaptive/responsive_padding.dart';
 import 'task_detail_screen.dart';
 import 'placeholder_screen.dart';
 import 'settings_screen.dart';
+import 'category_manager_screen.dart';
 
 class AdaptiveTodoScreen extends StatefulWidget {
   const AdaptiveTodoScreen({super.key});
@@ -75,6 +76,16 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const SettingsScreen()),
+          );
+          setState(() {
+            _selectedNavIndex = 0;
+          });
+        } else if (index == 2) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CategoryManagerScreen(),
+            ),
           );
           setState(() {
             _selectedNavIndex = 0;
@@ -573,7 +584,35 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
   }
 
   void _showStatistics(BuildContext context, TaskProvider taskProvider) {
-    final categoryStats = taskProvider.getCategoryStats();
+    final overallStats =
+        taskProvider.getCategoryStats(AppConstants.systemCategoryAll);
+
+    final categoryCounts = taskProvider.categories
+        .map(
+          (category) => MapEntry(
+            category.name,
+            taskProvider.getCategoryStats(category.name).totalTasks,
+          ),
+        )
+        .where((entry) => entry.value > 0)
+        .toList();
+
+    final uncategorizedStats =
+        taskProvider.getCategoryStats(AppConstants.uncategorizedCategory);
+    if (uncategorizedStats.totalTasks > 0) {
+      categoryCounts.add(
+        MapEntry(
+          AppConstants.uncategorizedCategory,
+          uncategorizedStats.totalTasks,
+        ),
+      );
+    }
+
+    final categoryRows = [
+      MapEntry(AppConstants.systemCategoryAll, overallStats.totalTasks),
+      ...categoryCounts,
+    ];
+
     final priorityStats = taskProvider.getPriorityStats();
 
     showDialog(
@@ -591,7 +630,7 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              ...categoryStats.entries.map((entry) {
+              ...categoryRows.map((entry) {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4.0),
                   child: Row(

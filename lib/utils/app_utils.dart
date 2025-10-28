@@ -22,8 +22,15 @@ class AppConstants {
       'Notifications for task due dates';
 
   // Default values
-  static const String defaultCategory = 'General';
+  static const String systemCategoryAll = 'All';
+  static const String uncategorizedCategory = 'Uncategorized';
+  static const String defaultCategory = 'Personal';
   static const TaskPriority defaultPriority = TaskPriority.medium;
+  static const int maxCategoryNameLength = 30;
+  static const List<String> reservedCategoryNames = [
+    systemCategoryAll,
+    uncategorizedCategory,
+  ];
 
   // Date formats
   static const String dateFormat = 'MMM dd, yyyy';

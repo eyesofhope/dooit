@@ -480,7 +480,35 @@ class _TodoScreenState extends State<TodoScreen> {
   }
 
   void _showStatistics(BuildContext context, TaskProvider taskProvider) {
-    final categoryStats = taskProvider.getCategoryStats();
+    final overallStats =
+        taskProvider.getCategoryStats(AppConstants.systemCategoryAll);
+
+    final categoryCounts = taskProvider.categories
+        .map(
+          (category) => MapEntry(
+            category.name,
+            taskProvider.getCategoryStats(category.name).totalTasks,
+          ),
+        )
+        .where((entry) => entry.value > 0)
+        .toList();
+
+    final uncategorizedStats =
+        taskProvider.getCategoryStats(AppConstants.uncategorizedCategory);
+    if (uncategorizedStats.totalTasks > 0) {
+      categoryCounts.add(
+        MapEntry(
+          AppConstants.uncategorizedCategory,
+          uncategorizedStats.totalTasks,
+        ),
+      );
+    }
+
+    final categoryRows = [
+      MapEntry(AppConstants.systemCategoryAll, overallStats.totalTasks),
+      ...categoryCounts,
+    ];
+
     final priorityStats = taskProvider.getPriorityStats();
 
     showDialog(
@@ -498,7 +526,7 @@ class _TodoScreenState extends State<TodoScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              ...categoryStats.entries.map(
+              ...categoryRows.map(
                 (entry) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(
