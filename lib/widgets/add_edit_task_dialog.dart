@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
+import '../models/category.dart' as models;
 import '../providers/task_provider.dart';
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
@@ -146,10 +147,10 @@ class _AddEditTaskDialogState extends State<AddEditTaskDialog> {
   }
 
   Widget _buildCategorySelector() {
-    return Consumer<TaskProvider>(
-      builder: (context, taskProvider, child) {
-        final categories = taskProvider.categories;
-
+    // Selector rebuilds dropdown only when categories change.
+    return Selector<TaskProvider, List<models.Category>>(
+      selector: (context, provider) => provider.categories,
+      builder: (context, categories, _) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

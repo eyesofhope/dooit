@@ -47,29 +47,25 @@ class DoItApp extends StatelessWidget {
           create: (context) => TaskProvider()..initialize(),
         ),
       ],
-      child: Consumer<TaskProvider>(
-        builder: (context, taskProvider, child) {
-          return MaterialApp(
-            title: AppConstants.appName,
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.system,
-            home: Directionality(
-              textDirection: TextDirection.ltr, // Support for RTL/LTR
-              child: const TodoScreen(),
+      child: MaterialApp(
+        title: AppConstants.appName,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.system,
+        home: Directionality(
+          textDirection: TextDirection.ltr, // Support for RTL/LTR
+          child: const TodoScreen(),
+        ),
+        builder: (context, child) {
+          // Handle text scaling for accessibility
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: MediaQuery.of(
+                context,
+              ).textScaler.clamp(minScaleFactor: 0.8, maxScaleFactor: 1.5),
             ),
-            builder: (context, child) {
-              // Handle text scaling for accessibility
-              return MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                  textScaler: MediaQuery.of(
-                    context,
-                  ).textScaler.clamp(minScaleFactor: 0.8, maxScaleFactor: 1.5),
-                ),
-                child: child!,
-              );
-            },
+            child: child!,
           );
         },
       ),
