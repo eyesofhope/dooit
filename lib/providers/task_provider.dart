@@ -2,13 +2,17 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/task.dart';
 import '../models/category.dart' as models;
+import '../models/app_error.dart';
 import '../services/notification_service.dart';
+import '../services/logging_service.dart';
 import '../utils/app_utils.dart';
+import '../utils/error_messages.dart';
 
 class TaskProvider extends ChangeNotifier {
   Box<Task>? _tasksBox;
   Box<models.Category>? _categoriesBox;
   final NotificationService _notificationService = NotificationService();
+  final LoggingService _loggingService = LoggingService();
 
   // State variables
   List<Task> _tasks = [];
@@ -17,6 +21,7 @@ class TaskProvider extends ChangeNotifier {
   SortOption _currentSort = SortOption.createdDate;
   FilterOption _currentFilter = FilterOption.all;
   String _selectedCategory = 'All';
+  AppError? _lastError;
 
   // Getters
   List<Task> get tasks => _getFilteredAndSortedTasks();
@@ -26,6 +31,7 @@ class TaskProvider extends ChangeNotifier {
   SortOption get currentSort => _currentSort;
   FilterOption get currentFilter => _currentFilter;
   String get selectedCategory => _selectedCategory;
+  AppError? get lastError => _lastError;
 
   // Statistics
   int get totalTasks => _tasks.length;
@@ -40,117 +46,278 @@ class TaskProvider extends ChangeNotifier {
     return (completedTasks / totalTasks) * 100;
   }
 
-  // Initialize the provider
+  void _setError(AppError error) {
+    _lastError = error;
+    _loggingService.logAppError(error);
+    notifyListeners();
+  }
+
+  void clearError() {
+    _lastError = null;
+    notifyListeners();
+  }
+
   Future<void> initialize() async {
     try {
+      _loggingService.info('Initializing TaskProvider', context: 'TaskProvider.initialize');
+      
       _tasksBox = await Hive.openBox<Task>(AppConstants.tasksBoxName);
       _categoriesBox = await Hive.openBox<models.Category>(
         AppConstants.categoriesBoxName,
       );
 
-      // Load existing data
       await _loadTasks();
       await _loadCategories();
 
-      // Initialize default categories if none exist
       if (_categories.isEmpty) {
         await _initializeDefaultCategories();
       }
 
-      debugPrint(
+      await _performDataConsistencyCheck();
+
+      _loggingService.info(
         'TaskProvider initialized with ${_tasks.length} tasks and ${_categories.length} categories',
+        context: 'TaskProvider.initialize',
       );
-    } catch (e) {
-      debugPrint('Error initializing TaskProvider: $e');
+      
+      clearError();
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseOpenFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider.initialize',
+      );
+      _setError(error);
+    }
+  }
+
+  Future<void> _performDataConsistencyCheck() async {
+    try {
+      _loggingService.debug('Performing data consistency check', context: 'TaskProvider');
+      
+      final categoryNames = _categories.map((c) => c.name).toSet();
+      bool needsUpdate = false;
+
+      for (var i = 0; i < _tasks.length; i++) {
+        final task = _tasks[i];
+        if (!categoryNames.contains(task.category)) {
+          _loggingService.warning(
+            'Task "${task.title}" has invalid category "${task.category}", resetting to default',
+            context: 'DataConsistency',
+          );
+          
+          final updatedTask = task.copyWith(category: AppConstants.defaultCategory);
+          await _tasksBox?.putAt(i, updatedTask);
+          _tasks[i] = updatedTask;
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        notifyListeners();
+        _loggingService.info('Data consistency issues fixed', context: 'DataConsistency');
+      }
+    } catch (e, stackTrace) {
+      _loggingService.warning(
+        'Error during data consistency check',
+        context: 'DataConsistency',
+        error: e,
+      );
     }
   }
 
   Future<void> _loadTasks() async {
-    if (_tasksBox != null) {
-      _tasks = _tasksBox!.values.toList();
-      notifyListeners();
+    try {
+      if (_tasksBox != null) {
+        _tasks = _tasksBox!.values.toList();
+        _loggingService.debug('Loaded ${_tasks.length} tasks', context: 'TaskProvider._loadTasks');
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseReadFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider._loadTasks',
+      );
+      _setError(error);
+      _tasks = [];
     }
   }
 
   Future<void> _loadCategories() async {
-    if (_categoriesBox != null) {
-      _categories = _categoriesBox!.values.toList();
-      notifyListeners();
+    try {
+      if (_categoriesBox != null) {
+        _categories = _categoriesBox!.values.toList();
+        _loggingService.debug('Loaded ${_categories.length} categories', context: 'TaskProvider._loadCategories');
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseReadFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider._loadCategories',
+      );
+      _setError(error);
+      _categories = [];
     }
   }
 
   Future<void> _initializeDefaultCategories() async {
-    final defaultCategories = models.Category.getDefaultCategories();
-    for (final category in defaultCategories) {
-      await _categoriesBox?.add(category);
+    try {
+      final defaultCategories = models.Category.getDefaultCategories();
+      for (final category in defaultCategories) {
+        await _categoriesBox?.add(category);
+      }
+      await _loadCategories();
+      _loggingService.info('Default categories initialized', context: 'TaskProvider');
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseWriteFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider._initializeDefaultCategories',
+      );
+      _setError(error);
     }
-    await _loadCategories();
   }
 
-  // Task CRUD operations
-  Future<void> addTask(Task task) async {
+  Future<bool> addTask(Task task) async {
     try {
+      clearError();
+      
+      if (task.title.trim().isEmpty) {
+        throw ValidationError(
+          message: ErrorMessages.validationEmptyTitle,
+          context: 'TaskProvider.addTask',
+        );
+      }
+
       await _tasksBox?.add(task);
       _tasks.add(task);
 
-      // Schedule notification if due date is set and task has notification enabled
       if (task.hasNotification && task.dueDate != null && !task.isCompleted) {
-        await _notificationService.scheduleTaskNotification(task);
+        try {
+          await _notificationService.scheduleTaskNotification(task);
+        } catch (e, stackTrace) {
+          _loggingService.warning(
+            'Failed to schedule notification for task',
+            context: 'TaskProvider.addTask',
+            error: e,
+          );
+        }
       }
 
       notifyListeners();
-      debugPrint('Task added: ${task.title}');
-    } catch (e) {
-      debugPrint('Error adding task: $e');
+      _loggingService.info('Task added: ${task.title}', context: 'TaskProvider.addTask');
+      return true;
+    } catch (e, stackTrace) {
+      final error = e is AppError
+          ? e
+          : DatabaseError(
+              message: ErrorMessages.databaseWriteFailed,
+              technicalDetails: e.toString(),
+              stackTrace: stackTrace,
+              context: 'TaskProvider.addTask',
+            );
+      _setError(error);
+      return false;
     }
   }
 
-  Future<void> updateTask(Task updatedTask) async {
+  Future<bool> updateTask(Task updatedTask) async {
     try {
+      clearError();
+      
+      if (updatedTask.title.trim().isEmpty) {
+        throw ValidationError(
+          message: ErrorMessages.validationEmptyTitle,
+          context: 'TaskProvider.updateTask',
+        );
+      }
+
       final index = _tasks.indexWhere((task) => task.id == updatedTask.id);
       if (index != -1) {
-        // Update the task in Hive
         await _tasksBox?.putAt(index, updatedTask);
         _tasks[index] = updatedTask;
 
-        // Handle notification updates
-        await _notificationService.cancelTaskNotification(updatedTask.id);
+        try {
+          await _notificationService.cancelTaskNotification(updatedTask.id);
 
-        if (updatedTask.hasNotification &&
-            updatedTask.dueDate != null &&
-            !updatedTask.isCompleted) {
-          await _notificationService.scheduleTaskNotification(updatedTask);
+          if (updatedTask.hasNotification &&
+              updatedTask.dueDate != null &&
+              !updatedTask.isCompleted) {
+            await _notificationService.scheduleTaskNotification(updatedTask);
+          }
+        } catch (e) {
+          _loggingService.warning(
+            'Failed to update notification for task',
+            context: 'TaskProvider.updateTask',
+            error: e,
+          );
         }
 
         notifyListeners();
-        debugPrint('Task updated: ${updatedTask.title}');
+        _loggingService.info('Task updated: ${updatedTask.title}', context: 'TaskProvider.updateTask');
+        return true;
       }
-    } catch (e) {
-      debugPrint('Error updating task: $e');
+      return false;
+    } catch (e, stackTrace) {
+      final error = e is AppError
+          ? e
+          : DatabaseError(
+              message: ErrorMessages.databaseWriteFailed,
+              technicalDetails: e.toString(),
+              stackTrace: stackTrace,
+              context: 'TaskProvider.updateTask',
+            );
+      _setError(error);
+      return false;
     }
   }
 
-  Future<void> deleteTask(String taskId) async {
+  Future<bool> deleteTask(String taskId) async {
     try {
+      clearError();
+      
       final index = _tasks.indexWhere((task) => task.id == taskId);
       if (index != -1) {
-        // Cancel any scheduled notifications
-        await _notificationService.cancelTaskNotification(taskId);
+        try {
+          await _notificationService.cancelTaskNotification(taskId);
+        } catch (e) {
+          _loggingService.warning(
+            'Failed to cancel notification for deleted task',
+            context: 'TaskProvider.deleteTask',
+            error: e,
+          );
+        }
 
-        // Remove from storage and local list
         await _tasksBox?.deleteAt(index);
         _tasks.removeAt(index);
 
         notifyListeners();
-        debugPrint('Task deleted: $taskId');
+        _loggingService.info('Task deleted: $taskId', context: 'TaskProvider.deleteTask');
+        return true;
       }
-    } catch (e) {
-      debugPrint('Error deleting task: $e');
+      return false;
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseDeleteFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider.deleteTask',
+      );
+      _setError(error);
+      return false;
     }
   }
 
-  Future<void> toggleTaskCompletion(String taskId) async {
+  Future<bool> toggleTaskCompletion(String taskId) async {
     try {
+      clearError();
+      
       final index = _tasks.indexWhere((task) => task.id == taskId);
       if (index != -1) {
         final task = _tasks[index];
@@ -159,27 +326,55 @@ class TaskProvider extends ChangeNotifier {
           completedAt: !task.isCompleted ? DateTime.now() : null,
         );
 
-        await updateTask(updatedTask);
+        return await updateTask(updatedTask);
       }
-    } catch (e) {
-      debugPrint('Error toggling task completion: $e');
+      return false;
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseWriteFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider.toggleTaskCompletion',
+      );
+      _setError(error);
+      return false;
     }
   }
 
-  // Category operations
-  Future<void> addCategory(models.Category category) async {
+  Future<bool> addCategory(models.Category category) async {
     try {
+      clearError();
+      
+      if (category.name.trim().isEmpty) {
+        throw ValidationError(
+          message: ErrorMessages.validationEmptyCategory,
+          context: 'TaskProvider.addCategory',
+        );
+      }
+
       await _categoriesBox?.add(category);
       _categories.add(category);
       notifyListeners();
-      debugPrint('Category added: ${category.name}');
-    } catch (e) {
-      debugPrint('Error adding category: $e');
+      _loggingService.info('Category added: ${category.name}', context: 'TaskProvider.addCategory');
+      return true;
+    } catch (e, stackTrace) {
+      final error = e is AppError
+          ? e
+          : DatabaseError(
+              message: ErrorMessages.databaseWriteFailed,
+              technicalDetails: e.toString(),
+              stackTrace: stackTrace,
+              context: 'TaskProvider.addCategory',
+            );
+      _setError(error);
+      return false;
     }
   }
 
-  Future<void> updateCategory(models.Category updatedCategory) async {
+  Future<bool> updateCategory(models.Category updatedCategory) async {
     try {
+      clearError();
+      
       final index = _categories.indexWhere(
         (cat) => cat.name == updatedCategory.name,
       );
@@ -187,18 +382,28 @@ class TaskProvider extends ChangeNotifier {
         await _categoriesBox?.putAt(index, updatedCategory);
         _categories[index] = updatedCategory;
         notifyListeners();
-        debugPrint('Category updated: ${updatedCategory.name}');
+        _loggingService.info('Category updated: ${updatedCategory.name}', context: 'TaskProvider.updateCategory');
+        return true;
       }
-    } catch (e) {
-      debugPrint('Error updating category: $e');
+      return false;
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseWriteFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider.updateCategory',
+      );
+      _setError(error);
+      return false;
     }
   }
 
-  Future<void> deleteCategory(String categoryName) async {
+  Future<bool> deleteCategory(String categoryName) async {
     try {
+      clearError();
+      
       final index = _categories.indexWhere((cat) => cat.name == categoryName);
       if (index != -1) {
-        // Update all tasks with this category to 'General'
         final tasksToUpdate = _tasks.where(
           (task) => task.category == categoryName,
         );
@@ -209,20 +414,27 @@ class TaskProvider extends ChangeNotifier {
           await updateTask(updatedTask);
         }
 
-        // Remove the category
         await _categoriesBox?.deleteAt(index);
         _categories.removeAt(index);
 
-        // Reset selected category if it was deleted
         if (_selectedCategory == categoryName) {
           _selectedCategory = 'All';
         }
 
         notifyListeners();
-        debugPrint('Category deleted: $categoryName');
+        _loggingService.info('Category deleted: $categoryName', context: 'TaskProvider.deleteCategory');
+        return true;
       }
-    } catch (e) {
-      debugPrint('Error deleting category: $e');
+      return false;
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: ErrorMessages.databaseDeleteFailed,
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider.deleteCategory',
+      );
+      _setError(error);
+      return false;
     }
   }
 
@@ -304,12 +516,22 @@ class TaskProvider extends ChangeNotifier {
     return stats;
   }
 
-  // Clear all data (for testing or reset purposes)
-  Future<void> clearAllData() async {
+  Future<bool> clearAllData() async {
     try {
+      clearError();
+      
       await _tasksBox?.clear();
       await _categoriesBox?.clear();
-      await _notificationService.cancelAllNotifications();
+      
+      try {
+        await _notificationService.cancelAllNotifications();
+      } catch (e) {
+        _loggingService.warning(
+          'Failed to cancel notifications during clear',
+          context: 'TaskProvider.clearAllData',
+          error: e,
+        );
+      }
 
       _tasks.clear();
       _categories.clear();
@@ -317,9 +539,17 @@ class TaskProvider extends ChangeNotifier {
       await _initializeDefaultCategories();
       notifyListeners();
 
-      debugPrint('All data cleared');
-    } catch (e) {
-      debugPrint('Error clearing data: $e');
+      _loggingService.info('All data cleared', context: 'TaskProvider.clearAllData');
+      return true;
+    } catch (e, stackTrace) {
+      final error = DatabaseError(
+        message: 'Failed to clear data',
+        technicalDetails: e.toString(),
+        stackTrace: stackTrace,
+        context: 'TaskProvider.clearAllData',
+      );
+      _setError(error);
+      return false;
     }
   }
 
