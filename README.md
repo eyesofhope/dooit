@@ -20,6 +20,8 @@ A comprehensive Flutter to-do list application with modern features and Material
 - **Smart Sorting**: Sort tasks by priority, due date, creation date, alphabetical order, or completion status
 - **Filtering Options**: Filter tasks by All, Pending, Completed, or Overdue status
 - **Task Management**: Mark tasks as complete, edit, duplicate, or delete with confirmation dialogs
+- **Data Export & Import**: Preserve or migrate data via human-readable JSON backups
+- **Backup & Restore**: Automatic daily/weekly backups, manual backups, and in-app restore/share controls
 
 ### Technical Features
 - **State Management**: Uses Provider for reactive state management

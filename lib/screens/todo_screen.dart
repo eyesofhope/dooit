@@ -13,6 +13,7 @@ import '../widgets/sort_dropdown.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/notification_test_widget.dart';
 import 'task_detail_screen.dart';
+import 'settings_screen.dart';
 
 class TodoScreen extends StatefulWidget {
   const TodoScreen({super.key});
@@ -549,11 +550,9 @@ class _TodoScreenState extends State<TodoScreen> {
   }
 
   void _showSettings(BuildContext context) {
-    // Placeholder for settings
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Settings coming soon!'),
-        duration: Duration(seconds: 2),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(),
       ),
     );
   }

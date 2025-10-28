@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../models/category.dart' as models;
 import '../providers/task_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/notification_service.dart';
 import '../utils/app_utils.dart';
 import '../utils/breakpoints.dart';
@@ -18,6 +19,7 @@ import '../widgets/adaptive/master_detail_layout.dart';
 import '../widgets/adaptive/responsive_padding.dart';
 import 'task_detail_screen.dart';
 import 'placeholder_screen.dart';
+import 'settings_screen.dart';
 
 class AdaptiveTodoScreen extends StatefulWidget {
   const AdaptiveTodoScreen({super.key});
@@ -30,6 +32,7 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   int _selectedNavIndex = 0;
+  bool _backupChecked = false;
 
   @override
   void dispose() {
@@ -40,6 +43,11 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
   @override
   Widget build(BuildContext context) {
     final breakpoint = context.breakpoint;
+
+    if (!_backupChecked) {
+      _backupChecked = true;
+      _checkAndPerformAutoBackup();
+    }
 
     return AdaptiveScaffold(
       appBar: _buildAppBar(context),
@@ -67,9 +75,19 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
       ],
       selectedIndex: _selectedNavIndex,
       onDestinationSelected: (index) {
+        if (index == 3) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const SettingsScreen(),
+            ),
+          );
+          return;
+        }
+
         setState(() {
           _selectedNavIndex = index;
         });
+
         if (index != 0) {
           _showPlaceholderMessage(context);
           setState(() {
@@ -645,5 +663,21 @@ class _AdaptiveTodoScreenState extends State<AdaptiveTodoScreen> {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _checkAndPerformAutoBackup() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final taskProvider = context.read<TaskProvider>();
+        final settingsProvider = context.read<SettingsProvider>();
+
+        await settingsProvider.performAutomaticBackupIfNeeded(
+          tasks: taskProvider.allTasks,
+          categories: taskProvider.categories,
+        );
+      } catch (e) {
+        debugPrint('Error checking automatic backup: $e');
+      }
+    });
   }
 }

@@ -6,7 +6,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'models/task.dart';
 import 'models/category.dart' as models;
 import 'models/app_version.dart';
+import 'models/app_settings.dart';
 import 'providers/task_provider.dart';
+import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
 import 'services/migration_service.dart';
 import 'screens/adaptive_todo_screen.dart';
@@ -24,6 +26,8 @@ void main() async {
   Hive.registerAdapter(TaskPriorityAdapter());
   Hive.registerAdapter(models.CategoryAdapter());
   Hive.registerAdapter(AppVersionAdapter());
+  Hive.registerAdapter(BackupFrequencyAdapter());
+  Hive.registerAdapter(AppSettingsAdapter());
 
   // Initialize notification service
   await NotificationService().initialize();
@@ -172,6 +176,9 @@ class _DoItAppState extends State<DoItApp> {
       providers: [
         ChangeNotifierProvider(
           create: (context) => TaskProvider()..initialize(),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => SettingsProvider()..initialize(),
         ),
       ],
       child: Consumer<TaskProvider>(
